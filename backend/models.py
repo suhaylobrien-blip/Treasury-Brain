@@ -217,14 +217,19 @@ def insert_deal(deal: dict) -> int:
     return deal_id
 
 
-def get_deals(entity: str, metal: str, deal_date: str = None) -> list:
+def get_deals(entity: str, metal: str, deal_date: str = None, limit: int = None) -> list:
     conn = get_conn()
     c    = conn.cursor()
     if deal_date:
-        c.execute("SELECT * FROM deals WHERE entity=? AND metal=? AND deal_date=?",
-                  (entity, metal, deal_date))
+        c.execute(
+            "SELECT * FROM deals WHERE entity=? AND metal=? AND deal_date=? ORDER BY id DESC",
+            (entity, metal, deal_date)
+        )
     else:
-        c.execute("SELECT * FROM deals WHERE entity=? AND metal=?", (entity, metal))
+        q = "SELECT * FROM deals WHERE entity=? AND metal=? ORDER BY deal_date DESC, id DESC"
+        if limit:
+            q += f" LIMIT {int(limit)}"
+        c.execute(q, (entity, metal))
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows

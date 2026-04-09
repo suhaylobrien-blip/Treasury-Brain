@@ -96,13 +96,12 @@ async function loadDashboard() {
 // ─────────────────────────────────────────────
 
 async function loadDeals() {
-  const today  = new Date().toISOString().slice(0, 10);
-  const deals  = await api(`/api/deals?entity=${currentEntity}&metal=${currentMetal}&date=${today}`);
+  const deals  = await api(`/api/deals?entity=${currentEntity}&metal=${currentMetal}&limit=500`);
   const tbody  = document.getElementById('deals-tbody');
   tbody.innerHTML = '';
 
   if (!deals.length) {
-    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--muted)">No deals today</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--muted)">No deals found — upload a dealer sheet to get started</td></tr>';
     return;
   }
 
@@ -282,11 +281,11 @@ function renderSiloChart(siloData) {
     type: 'doughnut',
     data: {
       labels,
-      datasets: [{ data: values, backgroundColor: ['#C9A84C','#A8A9AD','#1F4E79'] }]
+      datasets: [{ data: values, backgroundColor: ['#D4A755','#339E95','#432C59'], borderWidth: 0 }]
     },
     options: {
-      plugins: { legend: { labels: { color: '#E6EDF3' } } },
-      cutout: '60%',
+      plugins: { legend: { labels: { color: '#F5F5F5', font: { family: 'Arial', size: 11 } } } },
+      cutout: '65%',
     }
   });
 }
@@ -301,11 +300,11 @@ function renderChannelChart(channelData) {
     type: 'doughnut',
     data: {
       labels,
-      datasets: [{ data: values, backgroundColor: ['#1F4E79','#C9A84C'] }]
+      datasets: [{ data: values, backgroundColor: ['#4B1D75','#D4A755'], borderWidth: 0 }]
     },
     options: {
-      plugins: { legend: { labels: { color: '#E6EDF3' } } },
-      cutout: '60%',
+      plugins: { legend: { labels: { color: '#F5F5F5', font: { family: 'Arial', size: 11 } } } },
+      cutout: '65%',
     }
   });
 }
@@ -351,7 +350,7 @@ function showToast(msg, isError = false) {
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
-  toast.style.background = isError ? '#C62828' : '#1F4E79';
+  toast.style.background = isError ? '#C62828' : '#432C59';
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
 }

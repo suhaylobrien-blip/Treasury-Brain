@@ -5,6 +5,7 @@ API endpoints + serves the web dashboard.
 
 import json
 import os
+import tempfile
 from datetime import date, datetime
 from flask import Flask, jsonify, request, send_from_directory, abort
 
@@ -89,7 +90,8 @@ def deals_endpoint():
     entity    = request.args.get('entity', 'SABIS')
     metal     = request.args.get('metal', 'gold')
     deal_date = request.args.get('date')
-    deals     = get_deals(entity, metal, deal_date)
+    limit     = request.args.get('limit', type=int)
+    deals     = get_deals(entity, metal, deal_date, limit=limit)
     return jsonify(deals)
 
 
@@ -263,8 +265,8 @@ def upload_file():
     if f.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
-    os.makedirs(INBOX_DIR, exist_ok=True)
-    save_path = os.path.join(INBOX_DIR, f.filename)
+    # Save to local temp dir (NOT OneDrive) to avoid sync lock hangs
+    save_path = os.path.join(tempfile.gettempdir(), f.filename)
     f.save(save_path)
 
     result = process_file(save_path)
