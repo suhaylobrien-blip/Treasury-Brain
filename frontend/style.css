@@ -763,6 +763,28 @@ tr.proof-row:hover td { background: rgba(64,70,180,0.14); }
 .toast.show  { opacity: 1; transform: translateY(0); }
 .toast.error { border-left-color: var(--red); }
 
+/* ── PIPELINE TABLE ──────────────────────────────────────────────────────────── */
+.pipeline-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+tr.pipeline-row { background: rgba(212,167,85,0.06); }
+tr.pipeline-row:hover { background: rgba(212,167,85,0.12); }
+.btn-confirm-deal {
+  background: rgba(64,181,173,0.15);
+  border: 1px solid var(--green);
+  color: var(--green);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.btn-confirm-deal:hover { background: rgba(64,181,173,0.35); }
+
 /* ── SCROLLBAR ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

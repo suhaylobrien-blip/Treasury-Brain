@@ -13,7 +13,8 @@ from models import (
     get_deals, get_inventory, get_aged_inventory, get_latest_spot,
     get_cash_flows, insert_spot_price, init_db, reset_entity_data,
     set_inventory_position,
-    get_hedging_positions, insert_hedging_position, close_hedging_position
+    get_hedging_positions, insert_hedging_position, close_hedging_position,
+    get_pipeline, delete_pipeline_row
 )
 from processor import (
     get_provision_mode, live_impact_preview, build_daily_summary,
@@ -378,6 +379,43 @@ def upload_file():
             pass
 
     return jsonify(result)
+
+
+@app.route('/api/pipeline')
+def pipeline_endpoint():
+    """Return pipeline (yellow/quote) deals for an entity + metal."""
+    entity    = request.args.get('entity', 'SABIS')
+    metal     = request.args.get('metal',  'gold')
+    from_date = request.args.get('from')
+    to_date   = request.args.get('to')
+    rows      = get_pipeline(entity, metal, from_date, to_date)
+    return jsonify(rows)
+
+
+@app.route('/api/pipeline/<int:pipeline_id>/confirm', methods=['POST'])
+def confirm_pipeline(pipeline_id):
+    """Promote a yellow/quote pipeline deal to a confirmed deal."""
+    from importer import _process_row
+    from models import get_conn
+    conn = get_conn()
+    row  = conn.execute("SELECT * FROM pipeline WHERE id=?", (pipeline_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'error': 'Pipeline deal not found'}), 404
+    deal = dict(row)
+    # Fill required fields for _process_row
+    deal.setdefault('silo',         'retail')
+    deal.setdefault('channel',      'dealer')
+    deal.setdefault('dealer_name',  '')
+    deal.setdefault('status',       'confirmed')
+    deal.setdefault('product_type', 'bullion')
+    deal.setdefault('equiv_oz',     1.0)
+    try:
+        result = _process_row(deal, deal.get('source_file', 'manual-confirm'))
+        delete_pipeline_row(pipeline_id)
+        return jsonify({'status': 'ok', 'deal_id': result.get('deal_id')})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ─────────────────────────────────────────────

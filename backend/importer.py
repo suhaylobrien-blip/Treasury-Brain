@@ -254,21 +254,29 @@ def _silo_from_movement(movement: str) -> str:
 
 def _extract_half(df: pd.DataFrame, suffix: str = '') -> pd.DataFrame:
     """
-    The dealing sheet has two sets of deals side by side.
-    Left half: standard column names.
-    Right half: same names with '.1' suffix appended by pandas.
-    Returns a cleaned DataFrame for one half.
+    The dealing sheet has two sets of deals side by side (left = buys, right = sells).
+    Pandas appends '.1' to duplicate column names. If column names differ between
+    the two halves, fall back to a midpoint column split.
     """
     if suffix:
-        # Select only columns that end with the suffix
+        # Primary: look for columns ending with the suffix (.1 = right/sell side)
         cols = {c: c[:-len(suffix)] for c in df.columns if c.endswith(suffix)}
-        half = df[list(cols.keys())].rename(columns=cols)
+        if cols:
+            return df[list(cols.keys())].rename(columns=cols)
+        # Fallback: no .1 columns — take right half of the dataframe by column index
+        mid = len(df.columns) // 2
+        right = df.iloc[:, mid:].copy()
+        # Rename right-half columns to match the left-half names
+        right.columns = [str(c).split('.')[0].strip() for c in right.columns]
+        return right
     else:
         # Left half: columns that do NOT end with '.1'
-        cols = [c for c in df.columns if not c.endswith('.1')]
-        half = df[cols].copy()
-
-    return half
+        left_cols = [c for c in df.columns if not c.endswith('.1')]
+        if left_cols:
+            return df[left_cols].copy()
+        # Fallback: take left half by column index
+        mid = len(df.columns) // 2
+        return df.iloc[:, :mid].copy()
 
 
 def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
@@ -289,7 +297,7 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
     Each dict includes 'status' and 'product_type' fields.
     """
     deals = []
-    has_colours = bool(row_statuses)
+    has_colours = bool(row_statuses) and any(s for s in row_statuses.values())
 
     side_deal_type = {'': 'buy', '.1': 'sell'}
 
@@ -318,9 +326,21 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
             try:
                 spot  = float(row.get('spot_price_zar', ''))
                 units = float(row.get('units', ''))
-                equiv = float(row.get('equiv_oz', 1.0) or 1.0)
             except (ValueError, TypeError):
                 continue
+
+            # Use Total Ounces directly if available; fall back to Qty × UOM
+            try:
+                oz_direct = float(row.get('oz', '') or '')
+                if oz_direct > 0:
+                    equiv = oz_direct / units if units else 1.0
+                else:
+                    raise ValueError
+            except (ValueError, TypeError):
+                try:
+                    equiv = float(row.get('equiv_oz', 1.0) or 1.0)
+                except (ValueError, TypeError):
+                    equiv = 1.0   # UOM is text like "oz" — default 1 oz/unit
 
             if spot == 0 or units == 0:
                 continue
@@ -347,6 +367,8 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
             product_type = 'proof' if status == 'proof' else 'bullion'
             db_status    = 'confirmed' if status in ('confirmed', 'proof') else 'quote'
 
+            oz_val = equiv * units
+
             deals.append({
                 'entity':         entity,
                 'metal':          metal,
@@ -362,6 +384,7 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
                 'product_name':   str(row.get('product_name', '') or ''),
                 'units':          units,
                 'equiv_oz':       equiv,
+                'oz':             oz_val,
                 'spot_price_zar': spot,
                 'margin_pct':     margin,
                 'source_file':    source_file,
@@ -655,7 +678,7 @@ def _process_row(row: dict, source_file: str) -> dict:
     margin_pct = float(row['margin_pct'])
 
     equiv_oz  = float(row.get('equiv_oz', 1.0) or 1.0)
-    oz        = equiv_oz * units
+    oz        = float(row.get('oz', 0) or 0) or (equiv_oz * units)
 
     deal_date = str(row.get('deal_date', date.today().isoformat()))[:10]
 

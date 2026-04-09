@@ -103,18 +103,26 @@ function buildDealsUrl() {
   return base;
 }
 
+function buildPipelineUrl() {
+  const base = `/api/pipeline?entity=${currentEntity}&metal=${currentMetal}`;
+  if (filterFrom) return base + `&from=${filterFrom}` + (filterTo ? `&to=${filterTo}` : '');
+  return base;
+}
+
 // ─── LOAD ALL ────────────────────────────────────────────────────────────────
 
 async function loadAll() {
-  const [deals, inv, hedging] = await Promise.all([
+  const [deals, inv, hedging, pipeline] = await Promise.all([
     api(buildDealsUrl()).catch(() => []),
     api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({})),
     api(`/api/hedging?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({ positions: [], long_oz: 0, short_oz: 0, net_oz: 0 })),
+    api(buildPipelineUrl()).catch(() => []),
   ]);
 
   renderExposure(deals, inv, hedging);
   renderTrading(deals);
   renderHedging(hedging, inv);
+  renderPipelineTable(pipeline, inv);
   renderDealsTable(deals);
   renderAgedInventory(inv.aged_parcels || []);
   await loadSpot();
@@ -336,6 +344,76 @@ function renderDealerTable(deals) {
     `;
     tbody.appendChild(tr);
   });
+}
+
+// ─── PIPELINE TABLE ───────────────────────────────────────────────────────────
+
+function renderPipelineTable(pipeline, inv) {
+  const tbody = document.getElementById('pipeline-tbody');
+  if (!tbody) return;
+
+  const label = document.getElementById('pipeline-count-label');
+  if (label) label.textContent = pipeline.length ? `(${pipeline.length})` : '';
+
+  const section = document.getElementById('pipeline-section');
+  if (section) section.style.display = pipeline.length ? '' : 'none';
+
+  tbody.innerHTML = '';
+  if (!pipeline.length) return;
+
+  const spot      = (inv && inv.spot_zar) || 0;
+  const provision = (inv && inv.provision) || {};
+  const provRate  = provision.rate_pct || 0;
+  const bullionOz = (inv && inv.total_oz) || 0;
+
+  pipeline.forEach(p => {
+    const oz       = parseFloat(p.oz) || 0;
+    const margin   = parseFloat(p.margin_pct) || 0;
+    const useSpot  = parseFloat(p.spot_price_zar) || spot;
+    const dealType = p.deal_type || 'sell';
+
+    const effectivePrice = dealType === 'sell'
+      ? useSpot * (1 + margin / 100)
+      : useSpot * (1 - margin / 100);
+    const estValue = effectivePrice * oz;
+
+    // Estimated GP using provision hurdle
+    const profitPct = dealType === 'sell'
+      ? margin - provRate
+      : provRate - margin;
+    const estGP = (profitPct / 100) * (useSpot * oz);
+
+    // Exposure effect
+    const exposureDelta = dealType === 'buy' ? oz : -oz;
+    const newBullionOz  = bullionOz + exposureDelta;
+
+    const tr = document.createElement('tr');
+    tr.className = 'pipeline-row';
+    tr.innerHTML = `
+      <td>${p.deal_date || '–'}</td>
+      <td class="${dealType}">${dealType === 'buy' ? 'Buyback' : 'Sale'}</td>
+      <td>${p.product_name || p.product_code || '–'}</td>
+      <td>${fmt(p.units)}</td>
+      <td>${fmt(oz, 2)} oz</td>
+      <td>${formatZAR(useSpot)}</td>
+      <td>${fmt(margin, 2)}%</td>
+      <td>${formatZAR(estValue)}</td>
+      <td style="color:${estGP >= 0 ? 'var(--gold)' : 'var(--red)'};font-weight:600">${formatZAR(estGP)}</td>
+      <td style="color:${exposureDelta >= 0 ? 'var(--green)' : 'var(--red)'}">${exposureDelta >= 0 ? '+' : ''}${fmt(exposureDelta, 2)} oz → ${fmt(newBullionOz, 2)} oz</td>
+      <td><button class="btn-confirm-deal" onclick="confirmPipelineDeal(${p.id})">Confirm ✓</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function confirmPipelineDeal(id) {
+  try {
+    const r = await api(`/api/pipeline/${id}/confirm`, { method: 'POST' });
+    showToast('Deal confirmed and moved to transactions');
+    loadAll();
+  } catch (e) {
+    showToast('Confirm failed: ' + e.message, true);
+  }
 }
 
 // ─── DEALS TABLE ─────────────────────────────────────────────────────────────

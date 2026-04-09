@@ -268,6 +268,29 @@ def insert_pipeline(record: dict) -> int:
     return row_id
 
 
+def get_pipeline(entity: str, metal: str,
+                 from_date: str = None, to_date: str = None) -> list:
+    conn   = get_conn()
+    c      = conn.cursor()
+    params = [entity, metal]
+    where  = "entity=? AND metal=?"
+    if from_date:
+        where += " AND deal_date >= ?"; params.append(from_date)
+    if to_date:
+        where += " AND deal_date <= ?"; params.append(to_date)
+    c.execute(f"SELECT * FROM pipeline WHERE {where} ORDER BY deal_date ASC, id ASC", params)
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def delete_pipeline_row(pipeline_id: int):
+    conn = get_conn()
+    conn.execute("DELETE FROM pipeline WHERE id=?", (pipeline_id,))
+    conn.commit()
+    conn.close()
+
+
 def insert_deal(deal: dict) -> int:
     conn = get_conn()
     c    = conn.cursor()
