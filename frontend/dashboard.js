@@ -429,6 +429,27 @@ function renderPreview(r) {
   `;
 }
 
+// ─── OPENING POSITION ─────────────────────────────────────────────────────────
+
+async function setOpeningPosition() {
+  const input = document.getElementById('opening-pos-input');
+  const oz    = parseFloat(input?.value);
+  if (isNaN(oz)) { showToast('Enter a valid oz value (negative = short)', true); return; }
+
+  try {
+    const r = await api('/api/inventory/set', {
+      method: 'POST',
+      json: { entity: currentEntity, metal: currentMetal, oz },
+    });
+    const prov = r.provision || {};
+    showToast(`Opening position set: ${oz >= 0 ? '+' : ''}${oz.toFixed(2)} oz — ${prov.mode}`);
+    if (input) input.value = '';
+    loadAll();
+  } catch (e) {
+    showToast('Failed to set position: ' + e.message, true);
+  }
+}
+
 // ─── RESET DATA ───────────────────────────────────────────────────────────────
 
 async function resetData() {

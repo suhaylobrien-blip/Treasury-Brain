@@ -335,6 +335,23 @@ def update_inventory(entity: str, metal: str, delta_oz: float):
     conn.close()
 
 
+def set_inventory_position(entity: str, metal: str, oz: float):
+    """
+    Directly set the inventory to an absolute oz value.
+    Use to enter the real ecosystem opening position (negative = short).
+    """
+    conn = get_conn()
+    conn.execute("""
+        INSERT INTO inventory (entity, metal, total_oz)
+        VALUES (?, ?, ?)
+        ON CONFLICT(entity, metal) DO UPDATE SET
+            total_oz   = excluded.total_oz,
+            updated_at = datetime('now')
+    """, (entity, metal, oz))
+    conn.commit()
+    conn.close()
+
+
 def get_aged_inventory(entity: str, metal: str) -> list:
     conn = get_conn()
     c    = conn.cursor()

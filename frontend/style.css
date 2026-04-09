@@ -146,7 +146,7 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 /* ── EXPOSURE BANNER ────────────────────────────────────────────────────── */
 .exposure-banner {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, 1fr) 220px;
   gap: 12px;
 }
 
@@ -198,6 +198,42 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
   color: var(--muted);
   font-weight: 400;
 }
+
+/* ── OPENING POSITION CARD ───────────────────────────────────────────────── */
+.opening-pos-card { display: flex; flex-direction: column; gap: 8px; }
+.opening-pos-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.opening-pos-row input {
+  flex: 1;
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  padding: 6px 10px;
+  width: 100%;
+  outline: none;
+}
+.opening-pos-row input:focus { border-color: var(--purple); }
+.opening-pos-unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.btn-set-pos {
+  background: var(--purple);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: .5px;
+  transition: background .15s;
+  align-self: flex-start;
+}
+.btn-set-pos:hover { background: var(--purple-lt); }
 
 /* ── TRADING GRID (Buybacks | Sales | Hedging) ──────────────────────────── */
 .trading-grid {

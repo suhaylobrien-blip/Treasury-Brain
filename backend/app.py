@@ -11,7 +11,8 @@ from flask import Flask, jsonify, request, send_from_directory, abort
 
 from models import (
     get_deals, get_inventory, get_aged_inventory, get_latest_spot,
-    get_cash_flows, insert_spot_price, init_db, reset_entity_data
+    get_cash_flows, insert_spot_price, init_db, reset_entity_data,
+    set_inventory_position
 )
 from processor import (
     get_provision_mode, live_impact_preview, build_daily_summary,
@@ -127,6 +128,29 @@ def inventory_endpoint():
         'value_zar':   round(oz * spot, 2),
         'provision':   get_provision_mode(oz, metal),
         'aged_parcels': dormant_parcels,
+    })
+
+
+@app.route('/api/inventory/set', methods=['POST'])
+def set_inventory():
+    """
+    Directly set the opening inventory position for an entity + metal.
+    Use this to enter the true ecosystem position before importing deals.
+    Negative oz = short = provision mode active.
+    Body: { entity, metal, oz }
+    """
+    data   = request.json or {}
+    entity = data.get('entity', 'SABIS').upper()
+    metal  = data.get('metal',  'gold').lower()
+    oz     = float(data.get('oz', 0))
+    set_inventory_position(entity, metal, oz)
+    provision = get_provision_mode(oz, metal)
+    return jsonify({
+        'status':    'ok',
+        'entity':    entity,
+        'metal':     metal,
+        'total_oz':  oz,
+        'provision': provision,
     })
 
 

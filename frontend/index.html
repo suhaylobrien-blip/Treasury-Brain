@@ -64,6 +64,17 @@
       <div class="exp-sub">ZAR / oz</div>
     </div>
 
+    <div class="exp-card opening-pos-card">
+      <div class="exp-label">Opening Position</div>
+      <div class="opening-pos-row">
+        <input type="number" id="opening-pos-input" step="any"
+               placeholder="e.g. −500" title="Set ecosystem oz position (negative = short)" />
+        <span class="opening-pos-unit">oz</span>
+      </div>
+      <button class="btn-set-pos" onclick="setOpeningPosition()">Set</button>
+      <div class="exp-sub" id="opening-pos-sub">Ecosystem starting position</div>
+    </div>
+
   </section>
 
   <!-- ═══════════════════════════════════════════
