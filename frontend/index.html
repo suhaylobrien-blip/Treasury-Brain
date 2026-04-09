@@ -399,6 +399,73 @@
     </div>
   </section>
 
+  <!-- ═══════════════════════════════════════════
+       MARGIN CALCULATORS
+  ═══════════════════════════════════════════ -->
+  <div class="calc-grid">
+
+    <!-- GOLD MARGIN CALC -->
+    <section class="card calc-card">
+      <h2>Gold Margin Calc</h2>
+      <div class="calc-mode-row">
+        <label class="calc-mode-label">
+          <input type="radio" name="gold-calc-mode" value="simple" checked onchange="goldCalcMode='simple';runGoldCalc()"> KR / Fixed price
+        </label>
+        <label class="calc-mode-label">
+          <input type="radio" name="gold-calc-mode" value="vat" onchange="goldCalcMode='vat';runGoldCalc()"> Minted bar (VAT incl)
+        </label>
+      </div>
+      <div class="calc-body">
+        <div class="calc-row">
+          <label>Spot (R/oz)<input type="number" id="gc-spot" step="any" placeholder="e.g. 78000" oninput="runGoldCalc()" /></label>
+          <label>Margin %<input type="number" id="gc-margin" step="0.01" placeholder="e.g. 3.75" oninput="runGoldCalc()" /></label>
+          <label id="gc-uom-wrap">Oz / Unit<input type="number" id="gc-oz" step="any" value="1" oninput="runGoldCalc()" /></label>
+        </div>
+        <div class="calc-result" id="gc-result">—</div>
+        <div class="calc-divider"></div>
+        <div class="calc-row">
+          <label>Unit Price (R)<input type="number" id="gc-price-in" step="any" placeholder="Given price" oninput="runGoldCalcBack()" /></label>
+          <label>Back-calc<select id="gc-back-mode" onchange="runGoldCalcBack()">
+            <option value="margin">→ Margin</option>
+            <option value="spot">→ Spot</option>
+          </select></label>
+        </div>
+        <div class="calc-result" id="gc-result-back">—</div>
+      </div>
+    </section>
+
+    <!-- SILVER MARGIN CALC -->
+    <section class="card calc-card">
+      <h2>Silver Margin Calc</h2>
+      <div class="calc-mode-row">
+        <label class="calc-mode-label">
+          <input type="radio" name="silver-calc-mode" value="coin" checked onchange="silverCalcMode='coin';runSilverCalc()"> 1oz coin / bar
+        </label>
+        <label class="calc-mode-label">
+          <input type="radio" name="silver-calc-mode" value="kilo" onchange="silverCalcMode='kilo';runSilverCalc()"> Kilobar (32.151oz)
+        </label>
+      </div>
+      <div class="calc-body">
+        <div class="calc-row">
+          <label>Spot (R/oz)<input type="number" id="sc-spot" step="any" placeholder="e.g. 1230" oninput="runSilverCalc()" /></label>
+          <label>Margin %<input type="number" id="sc-margin" step="0.01" placeholder="e.g. 15.0" oninput="runSilverCalc()" /></label>
+          <label id="sc-uom-wrap">Oz / Unit<input type="number" id="sc-oz" step="any" value="1" oninput="runSilverCalc()" /></label>
+        </div>
+        <div class="calc-result" id="sc-result">—</div>
+        <div class="calc-divider"></div>
+        <div class="calc-row">
+          <label>Unit Price VAT Incl (R)<input type="number" id="sc-price-in" step="any" placeholder="Given price" oninput="runSilverCalcBack()" /></label>
+          <label>Back-calc<select id="sc-back-mode" onchange="runSilverCalcBack()">
+            <option value="margin">→ Margin</option>
+            <option value="spot">→ Spot</option>
+          </select></label>
+        </div>
+        <div class="calc-result" id="sc-result-back">—</div>
+      </div>
+    </section>
+
+  </div>
+
 </main>
 
 <script src="dashboard.js"></script>

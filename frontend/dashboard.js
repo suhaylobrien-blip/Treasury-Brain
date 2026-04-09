@@ -642,6 +642,117 @@ async function resetData() {
   }
 }
 
+// ─── MARGIN CALCULATORS ───────────────────────────────────────────────────────
+// Two modes:
+//   simple      — Fixed price / KR  : no VAT. price = spot × (1 + margin/100)
+//   vat         — Minted bar/silver : 15% VAT. price_vat_incl = spot×oz×(1+margin/100)×1.15
+//
+// Backwards:
+//   → margin    : given price [+spot], calculate margin
+//   → spot      : given price + margin, calculate implied spot
+
+const VAT_RATE = 0.15;
+let goldCalcMode   = 'simple';
+let silverCalcMode = 'coin';
+
+function _fmtR(v) {
+  if (!isFinite(v)) return '—';
+  return 'R ' + v.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function _fmtPct(v) {
+  if (!isFinite(v)) return '—';
+  return v.toFixed(4) + '%';
+}
+
+// ── Gold forward calc ──────────────────────────────────────────────────────
+function runGoldCalc() {
+  const spot   = parseFloat(document.getElementById('gc-spot')?.value);
+  const margin = parseFloat(document.getElementById('gc-margin')?.value);
+  const oz     = parseFloat(document.getElementById('gc-oz')?.value) || 1;
+  const el     = document.getElementById('gc-result');
+  if (!el) return;
+  if (!spot || isNaN(margin)) { el.textContent = '—'; return; }
+
+  let price, label;
+  if (goldCalcMode === 'vat') {
+    const priceExVAT = spot * oz * (1 + margin / 100);
+    price = priceExVAT * (1 + VAT_RATE);
+    label = `${_fmtR(price)} VAT incl  (ex-VAT ${_fmtR(priceExVAT)},  ${_fmtR(priceExVAT/oz)} /oz)`;
+  } else {
+    price = spot * oz * (1 + margin / 100);
+    label = `${_fmtR(price)} / unit  (${_fmtR(price/oz)} per oz)`;
+  }
+  el.textContent = label;
+}
+
+// ── Gold backward calc ─────────────────────────────────────────────────────
+function runGoldCalcBack() {
+  const priceIn  = parseFloat(document.getElementById('gc-price-in')?.value);
+  const margin   = parseFloat(document.getElementById('gc-margin')?.value);
+  const spot     = parseFloat(document.getElementById('gc-spot')?.value);
+  const oz       = parseFloat(document.getElementById('gc-oz')?.value) || 1;
+  const backMode = document.getElementById('gc-back-mode')?.value;
+  const el       = document.getElementById('gc-result-back');
+  if (!el || !priceIn) { el && (el.textContent = '—'); return; }
+
+  let result;
+  if (goldCalcMode === 'vat') {
+    const exVAT  = priceIn / (1 + VAT_RATE);
+    const perOz  = exVAT / oz;
+    if (backMode === 'margin' && spot) {
+      result = `Margin: ${_fmtPct((perOz / spot - 1) * 100)}  (ex-VAT/oz ${_fmtR(perOz)})`;
+    } else if (backMode === 'spot' && !isNaN(margin)) {
+      const impliedSpot = perOz / (1 + margin / 100);
+      result = `Implied spot: ${_fmtR(impliedSpot)}`;
+    }
+  } else {
+    const perOz = priceIn / oz;
+    if (backMode === 'margin' && spot) {
+      result = `Margin: ${_fmtPct((perOz / spot - 1) * 100)}`;
+    } else if (backMode === 'spot' && !isNaN(margin)) {
+      result = `Implied spot: ${_fmtR(perOz / (1 + margin / 100))}`;
+    }
+  }
+  el.textContent = result || '—';
+}
+
+// ── Silver forward calc ────────────────────────────────────────────────────
+function runSilverCalc() {
+  const spot   = parseFloat(document.getElementById('sc-spot')?.value);
+  const margin = parseFloat(document.getElementById('sc-margin')?.value);
+  const ozRaw  = parseFloat(document.getElementById('sc-oz')?.value);
+  const oz     = silverCalcMode === 'kilo' ? 32.151 : (ozRaw || 1);
+  const el     = document.getElementById('sc-result');
+  if (!el) return;
+  if (!spot || isNaN(margin)) { el.textContent = '—'; return; }
+
+  const priceExVAT = spot * oz * (1 + margin / 100);
+  const priceVAT   = priceExVAT * (1 + VAT_RATE);
+  el.textContent = `${_fmtR(priceVAT)} VAT incl  (ex-VAT ${_fmtR(priceExVAT)},  ${_fmtR(priceExVAT/oz)} /oz)`;
+}
+
+// ── Silver backward calc ───────────────────────────────────────────────────
+function runSilverCalcBack() {
+  const priceIn  = parseFloat(document.getElementById('sc-price-in')?.value);
+  const margin   = parseFloat(document.getElementById('sc-margin')?.value);
+  const spot     = parseFloat(document.getElementById('sc-spot')?.value);
+  const ozRaw    = parseFloat(document.getElementById('sc-oz')?.value);
+  const oz       = silverCalcMode === 'kilo' ? 32.151 : (ozRaw || 1);
+  const backMode = document.getElementById('sc-back-mode')?.value;
+  const el       = document.getElementById('sc-result-back');
+  if (!el || !priceIn) { el && (el.textContent = '—'); return; }
+
+  const exVAT = priceIn / (1 + VAT_RATE);
+  const perOz = exVAT / oz;
+  let result;
+  if (backMode === 'margin' && spot) {
+    result = `Margin: ${_fmtPct((perOz / spot - 1) * 100)}  (ex-VAT/oz ${_fmtR(perOz)})`;
+  } else if (backMode === 'spot' && !isNaN(margin)) {
+    result = `Implied spot: ${_fmtR(perOz / (1 + margin / 100))}`;
+  }
+  el.textContent = result || '—';
+}
+
 // ─── FILE UPLOAD ──────────────────────────────────────────────────────────────
 
 async function uploadFile(input) {
