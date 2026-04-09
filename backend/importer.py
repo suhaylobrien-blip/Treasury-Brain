@@ -142,6 +142,7 @@ def _read_row_statuses(workbook_path: str, sheet_name: str) -> dict:
     from openpyxl import load_workbook
     import warnings
     warnings.filterwarnings('ignore')
+    wb = None
     try:
         wb = load_workbook(workbook_path, data_only=True)
         ws = wb[sheet_name]
@@ -156,11 +157,16 @@ def _read_row_statuses(workbook_path: str, sheet_name: str) -> dict:
                     status = s
                     break
             statuses[row_num] = status
-        wb.close()
         return statuses
     except Exception as e:
         print(f"    [colour] Could not read colours from '{sheet_name}': {e}")
         return {}
+    finally:
+        if wb:
+            try:
+                wb.close()
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────
@@ -449,6 +455,7 @@ def _process_sabis_file(filepath: str, filename: str,
         try:
             df = pd.read_excel(src, sheet_name=tab, dtype=str, header=0,
                                engine='openpyxl')
+            df = df.copy()   # detach from the file handle immediately
         except Exception as e:
             all_errors.append(f"Tab '{tab}': could not read — {e}")
             continue

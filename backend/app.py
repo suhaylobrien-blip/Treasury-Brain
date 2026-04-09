@@ -353,17 +353,29 @@ def reset_data():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """Upload a dealer Excel file for immediate processing."""
+    import uuid
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     f = request.files['file']
     if f.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
-    # Save to local temp dir (NOT OneDrive) to avoid sync lock hangs
-    save_path = os.path.join(tempfile.gettempdir(), f.filename)
+    # Use a unique temp filename (UUID prefix) so a previously locked copy of
+    # the same filename never blocks this upload on Windows.
+    ext       = os.path.splitext(f.filename)[1]
+    tmp_name  = f"{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(tempfile.gettempdir(), tmp_name)
     f.save(save_path)
 
-    result = process_file(save_path)
+    try:
+        result = process_file(save_path)
+    finally:
+        # Clean up the unique temp file whether processing succeeded or not
+        try:
+            os.remove(save_path)
+        except OSError:
+            pass
+
     return jsonify(result)
 
 
