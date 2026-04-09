@@ -24,11 +24,18 @@ DORMANCY_DAYS   = CONFIG['dormancy_threshold_days']  # 14
 def get_provision_mode(inventory_oz: float, metal: str) -> dict:
     """
     Returns current provision mode and rate for a given inventory level.
-    Inventory negative  → PROVISION active (company oversold, using float)
-    Inventory positive  → NO PROVISION (stock on hand, no need to provision)
+
+    Inventory < 0  → PROVISION active  (company is short — float position)
+    Inventory >= 0 → NO PROVISION      (stock on hand)
+
+    The provision rate (gold 4.5%, silver 8%) is the business hurdle rate.
+    It is ALWAYS used as the GP baseline regardless of inventory sign,
+    because every deal must be measured against this cost of capital —
+    not just when the company is short.  The 'active' flag tells you
+    whether the rate is actually being charged on the float today.
     """
     active = inventory_oz < 0
-    rate   = PROVISION_RATES.get(metal, 0) if active else 0.0
+    rate   = PROVISION_RATES.get(metal, 0)   # always the full rate — the hurdle
     return {
         'active':    active,
         'mode':      'PROVISION' if active else 'NO PROVISION',
@@ -99,18 +106,26 @@ def margin_vs_provision(margin_pct: float, provision_pct: float, deal_type: str)
     """
     Calculates profit margin relative to provision for a single deal.
 
-    For SELLS:
-        Profit = sale margin % - provision %
-        Positive = profitable (sold above provision baseline)
+    The provision rate is the business hurdle rate (gold 4.5%, silver 8%).
+    Every deal is measured against it — not just when in provision mode.
 
-    For BUYS (buybacks from clients):
-        Profit = provision % - buyback margin %
-        Positive = profitable (bought below provision baseline)
+    SELLS:
+        Company sells to client at spot + margin%.
+        Profit vs provision = margin% − provision%.
+        Positive → sale margin clears the provision hurdle (profitable).
+        Example: sell at 5%, provision 4.5% → profit = +0.5%
+
+    BUYS (buybacks from clients):
+        Company buys from client at spot − margin%.
+        Profit vs provision = provision% − margin%.
+        Positive → buying below the provision rate (profitable buyback).
+        Example: buy at 2%, provision 4.5% → profit = +2.5%
+        (company covers its position for less than the provision cost)
     """
     if deal_type == 'sell':
         profit_pct = margin_pct - provision_pct
         label      = 'margin over provision'
-    else:  # buy
+    else:  # buy / buyback
         profit_pct = provision_pct - margin_pct
         label      = 'margin under provision'
 
@@ -173,15 +188,22 @@ def live_impact_preview(
     deal_type   = deal['type']
     metal       = deal['metal']
 
-    # Effective price and deal value
-    effective_price = spot * (1 + margin_pct / 100)
-    deal_value      = effective_price * oz
+    # Effective price:
+    #   Sells: company charges client above spot → spot × (1 + margin%)
+    #   Buys:  company pays client below spot    → spot × (1 − margin%)
+    if deal_type == 'sell':
+        effective_price = spot * (1 + margin_pct / 100)
+    else:
+        effective_price = spot * (1 - margin_pct / 100)
+
+    deal_value = effective_price * oz
 
     # Margin vs provision
     mvp = margin_vs_provision(margin_pct, provision_pct, deal_type)
 
-    # GP contribution
-    gp = calc_gp_contribution(mvp['profit_pct'], deal_value)
+    # GP uses notional (spot × oz) as base so buy/sell GP are directly comparable
+    notional = spot * oz
+    gp = calc_gp_contribution(mvp['profit_pct'], notional)
 
     # Cash flow: buy = cash out (negative), sell = cash in (positive)
     cash_delta = deal_value if deal_type == 'sell' else -deal_value

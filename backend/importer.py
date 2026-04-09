@@ -615,11 +615,20 @@ def _process_row(row: dict, source_file: str) -> dict:
     provision         = get_provision_mode(current_inventory, metal)
     provision_pct     = provision['rate_pct']
 
-    effective_price = spot * (1 + margin_pct / 100)
-    deal_value      = effective_price * oz
+    # Sells: client pays above spot  → effective = spot × (1 + margin%)
+    # Buys:  company pays below spot → effective = spot × (1 − margin%)
+    if deal_type == 'sell':
+        effective_price = spot * (1 + margin_pct / 100)
+    else:
+        effective_price = spot * (1 - margin_pct / 100)
 
+    deal_value = effective_price * oz
+
+    # GP = profit vs provision hurdle × deal notional (spot × oz)
+    # Using spot × oz as the base keeps GP independent of the margin direction
+    notional    = spot * oz
     mvp = margin_vs_provision(margin_pct, provision_pct, deal_type)
-    gp  = calc_gp_contribution(mvp['profit_pct'], deal_value)
+    gp  = calc_gp_contribution(mvp['profit_pct'], notional)
 
     inv_delta     = oz if deal_type == 'buy' else -oz
     new_inventory = current_inventory + inv_delta
