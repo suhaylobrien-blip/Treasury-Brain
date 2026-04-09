@@ -36,6 +36,25 @@
 <main>
 
   <!-- ═══════════════════════════════════════════
+       DATE FILTER — affects entire dashboard
+  ═══════════════════════════════════════════ -->
+  <div class="filter-toolbar standalone">
+    <div class="filter-pills">
+      <button class="pill active" onclick="setFilter('all',   this)">All</button>
+      <button class="pill"        onclick="setFilter('today', this)">Today</button>
+      <button class="pill"        onclick="setFilter('week',  this)">This Week</button>
+      <button class="pill"        onclick="setFilter('month', this)">This Month</button>
+      <button class="pill"        onclick="setFilter('year',  this)">This Year</button>
+    </div>
+    <div class="filter-custom">
+      <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
+      <span class="filter-sep">–</span>
+      <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
+    </div>
+    <span id="filter-label" class="filter-desc"></span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
        EXPOSURE BANNER  (top-line position)
   ═══════════════════════════════════════════ -->
   <section class="exposure-banner">
@@ -209,25 +228,6 @@
       </div>
     </section>
 
-  </div>
-
-  <!-- ═══════════════════════════════════════════
-       DATE FILTER (standalone — affects all sections)
-  ═══════════════════════════════════════════ -->
-  <div class="filter-toolbar standalone">
-    <div class="filter-pills">
-      <button class="pill active" onclick="setFilter('all',   this)">All</button>
-      <button class="pill"        onclick="setFilter('today', this)">Today</button>
-      <button class="pill"        onclick="setFilter('week',  this)">This Week</button>
-      <button class="pill"        onclick="setFilter('month', this)">This Month</button>
-      <button class="pill"        onclick="setFilter('year',  this)">This Year</button>
-    </div>
-    <div class="filter-custom">
-      <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
-      <span class="filter-sep">–</span>
-      <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
-    </div>
-    <span id="filter-label" class="filter-desc"></span>
   </div>
 
   <!-- ═══════════════════════════════════════════
