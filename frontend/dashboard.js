@@ -122,7 +122,7 @@ async function loadAll() {
   renderExposure(deals, inv, hedging);
   renderTrading(deals);
   renderHedging(hedging, inv);
-  renderPipelineTable(pipeline, inv);
+  renderPipelineTable(pipeline, inv, hedging);
   renderDealsTable(deals);
   renderAgedInventory(inv.aged_parcels || []);
   await loadSpot();
@@ -348,7 +348,7 @@ function renderDealerTable(deals) {
 
 // ─── PIPELINE TABLE ───────────────────────────────────────────────────────────
 
-function renderPipelineTable(pipeline, inv) {
+function renderPipelineTable(pipeline, inv, hedging) {
   const tbody = document.getElementById('pipeline-tbody');
   if (!tbody) return;
 
@@ -361,10 +361,13 @@ function renderPipelineTable(pipeline, inv) {
   tbody.innerHTML = '';
   if (!pipeline.length) return;
 
-  const spot      = (inv && inv.spot_zar) || 0;
-  const provision = (inv && inv.provision) || {};
-  const provRate  = provision.rate_pct || 0;
-  const bullionOz = (inv && inv.total_oz) || 0;
+  const spot       = (inv && inv.spot_zar) || 0;
+  const provision  = (inv && inv.provision) || {};
+  const provRate   = provision.rate_pct || 0;
+  const bullionOz  = (inv && inv.total_oz) || 0;
+  // Live ecosystem net = physical inventory + hedge net (hedges don't change per pipeline deal)
+  const hedgeNet   = (hedging && hedging.net_oz) || 0;
+  const liveEcoOz  = bullionOz + hedgeNet;
 
   pipeline.forEach(p => {
     const oz       = parseFloat(p.oz) || 0;
@@ -383,9 +386,11 @@ function renderPipelineTable(pipeline, inv) {
       : provRate - margin;
     const estGP = (profitPct / 100) * (useSpot * oz);
 
-    // Exposure effect
+    // Exposure effect on live ecosystem net (physical + hedges)
     const exposureDelta = dealType === 'buy' ? oz : -oz;
-    const newBullionOz  = bullionOz + exposureDelta;
+    const newEcoOz      = liveEcoOz + exposureDelta;
+    const deltaLabel    = `${exposureDelta >= 0 ? '+' : ''}${fmt(exposureDelta, 2)} oz`;
+    const ecoLabel      = `${fmt(liveEcoOz, 2)} → ${fmt(newEcoOz, 2)} oz`;
 
     const tr = document.createElement('tr');
     tr.className = 'pipeline-row';
@@ -399,7 +404,10 @@ function renderPipelineTable(pipeline, inv) {
       <td>${fmt(margin, 2)}%</td>
       <td>${formatZAR(estValue)}</td>
       <td style="color:${estGP >= 0 ? 'var(--gold)' : 'var(--red)'};font-weight:600">${formatZAR(estGP)}</td>
-      <td style="color:${exposureDelta >= 0 ? 'var(--green)' : 'var(--red)'}">${exposureDelta >= 0 ? '+' : ''}${fmt(exposureDelta, 2)} oz → ${fmt(newBullionOz, 2)} oz</td>
+      <td style="color:${exposureDelta >= 0 ? 'var(--green)' : 'var(--red)'}">
+        <span style="font-weight:600">${deltaLabel}</span>
+        <span style="color:var(--muted);font-size:11px;display:block">${ecoLabel}</span>
+      </td>
       <td><button class="btn-confirm-deal" onclick="confirmPipelineDeal(${p.id})">Confirm ✓</button></td>
     `;
     tbody.appendChild(tr);

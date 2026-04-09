@@ -441,15 +441,18 @@ def process_file(filepath: str, entity: str = 'SABIS',
     filename = display_name or os.path.basename(filepath)
     print(f"\nProcessing: {filename}")
 
-    # Only copy to temp if the file is NOT already in the temp directory.
-    # When called from the upload endpoint the file is already a UUID temp
-    # copy — copying it again to the same path causes a Windows sharing error.
-    src_abs  = os.path.abspath(filepath)
-    tmp_dir  = os.path.abspath(tempfile.gettempdir())
-    in_temp  = os.path.dirname(src_abs) == tmp_dir
+    # Copy to local temp if not already there.
+    # Use normcase for comparison — Windows path comparison is case-insensitive
+    # but Python string comparison is not, which caused WinError 32 when the
+    # intended copy destination was the same file as the source.
+    src_abs  = os.path.normcase(os.path.abspath(filepath))
+    dst_path = os.path.normcase(
+        os.path.abspath(os.path.join(tempfile.gettempdir(), os.path.basename(filepath)))
+    )
+    already_at_dst = (src_abs == dst_path)
 
-    if in_temp:
-        # Already a local temp file — use it directly, no copy needed.
+    if already_at_dst:
+        # Already at the intended temp location — use it directly, no copy needed.
         tmp_path = filepath
     else:
         # File is on OneDrive / network — copy to local temp first.
@@ -463,7 +466,7 @@ def process_file(filepath: str, entity: str = 'SABIS',
     try:
         sheet_names = _get_sheet_names(tmp_path)
     except Exception as e:
-        if not in_temp:
+        if not already_at_dst:
             _move_to_errors(filepath, str(e))
         return {'status': 'error', 'file': filename, 'error': str(e)}
 
