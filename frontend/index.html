@@ -240,11 +240,27 @@
   ═══════════════════════════════════════════ -->
   <section class="card full-width">
     <div class="card-header">
-      <h2>All Deals <span id="deals-count-label" class="count-label"></span></h2>
+      <h2>Deals <span id="deals-count-label" class="count-label"></span></h2>
       <label class="upload-label">
         Upload Dealer Sheet
         <input type="file" accept=".xlsx,.xls,.xlsm" onchange="uploadFile(this)" />
       </label>
+    </div>
+
+    <!-- ── DATE FILTER TOOLBAR ── -->
+    <div class="filter-toolbar">
+      <div class="filter-pills">
+        <button class="pill active" onclick="setFilter('all',   this)">All</button>
+        <button class="pill"        onclick="setFilter('today', this)">Today</button>
+        <button class="pill"        onclick="setFilter('week',  this)">This Week</button>
+        <button class="pill"        onclick="setFilter('month', this)">This Month</button>
+        <button class="pill"        onclick="setFilter('year',  this)">This Year</button>
+      </div>
+      <div class="filter-custom">
+        <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
+        <span class="filter-sep">–</span>
+        <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
+      </div>
     </div>
     <div class="table-wrap">
       <table id="deals-table">

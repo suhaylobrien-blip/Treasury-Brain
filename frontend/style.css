@@ -326,6 +326,55 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 .hedge-divider { height: 1px; background: var(--border); margin: 2px 0; }
 .hedge-note { padding: 0 20px 14px; font-size: 11px; color: var(--muted2); font-style: italic; }
 
+/* ── DATE FILTER TOOLBAR ────────────────────────────────────────────────── */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 0 16px 0;
+  flex-wrap: wrap;
+}
+.filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.pill:hover  { border-color: var(--purple); color: var(--text); }
+.pill.active { background: var(--purple); border-color: var(--purple); color: #fff; }
+
+.filter-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filter-custom input[type="date"] {
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.filter-custom input[type="date"]:focus { outline: none; border-color: var(--gold); }
+.filter-sep { color: var(--muted); font-size: 12px; }
+
 /* ── CHARTS ROW ─────────────────────────────────────────────────────────── */
 .charts-row {
   display: grid;

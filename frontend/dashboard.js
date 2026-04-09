@@ -10,6 +10,11 @@ let currentMetal  = 'gold';
 let siloChart, channelChart, volumeChart, vwapChart, gpChart;
 const POLL_INTERVAL = 30_000;
 
+// Date filter state
+let filterMode  = 'all';   // all | today | week | month | year | custom
+let filterFrom  = '';
+let filterTo    = '';
+
 // ─── INIT ────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -41,11 +46,57 @@ function switchMetal(metal, btn) {
   loadAll();
 }
 
+// ─── DATE FILTER ─────────────────────────────────────────────────────────────
+
+function setFilter(mode, btn) {
+  filterMode = mode;
+
+  // Update pill active state
+  document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const today = new Date();
+  const pad   = n => String(n).padStart(2, '0');
+  const ymd   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  if (mode === 'today') {
+    filterFrom = filterTo = ymd(today);
+  } else if (mode === 'week') {
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - today.getDay() + 1);
+    filterFrom = ymd(mon);
+    filterTo   = ymd(today);
+  } else if (mode === 'month') {
+    filterFrom = `${today.getFullYear()}-${pad(today.getMonth()+1)}-01`;
+    filterTo   = ymd(today);
+  } else if (mode === 'year') {
+    filterFrom = `${today.getFullYear()}-01-01`;
+    filterTo   = ymd(today);
+  } else if (mode === 'custom') {
+    filterFrom = document.getElementById('filter-from')?.value || '';
+    filterTo   = document.getElementById('filter-to')?.value   || '';
+    // Deactivate all pills for custom
+    document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
+  } else {
+    // 'all'
+    filterFrom = '';
+    filterTo   = '';
+  }
+
+  loadAll();
+}
+
+function buildDealsUrl() {
+  const base = `/api/deals?entity=${currentEntity}&metal=${currentMetal}&limit=1000`;
+  if (filterFrom) return base + `&from=${filterFrom}` + (filterTo ? `&to=${filterTo}` : '');
+  return base;
+}
+
 // ─── LOAD ALL ────────────────────────────────────────────────────────────────
 
 async function loadAll() {
   const [deals, inv] = await Promise.all([
-    api(`/api/deals?entity=${currentEntity}&metal=${currentMetal}&limit=500`).catch(() => []),
+    api(buildDealsUrl()).catch(() => []),
     api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({})),
   ]);
 

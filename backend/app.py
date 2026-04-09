@@ -86,12 +86,15 @@ def dashboard():
 
 @app.route('/api/deals')
 def deals_endpoint():
-    """Return deals, filtered by entity, metal, and optional date."""
+    """Return deals, filtered by entity, metal, and optional date / date range."""
     entity    = request.args.get('entity', 'SABIS')
-    metal     = request.args.get('metal', 'gold')
+    metal     = request.args.get('metal',  'gold')
     deal_date = request.args.get('date')
+    from_date = request.args.get('from')
+    to_date   = request.args.get('to')
     limit     = request.args.get('limit', type=int)
-    deals     = get_deals(entity, metal, deal_date, limit=limit)
+    deals     = get_deals(entity, metal, deal_date,
+                          from_date=from_date, to_date=to_date, limit=limit)
     return jsonify(deals)
 
 
