@@ -83,6 +83,17 @@ function setFilter(mode, btn) {
     filterTo   = '';
   }
 
+  const lbl = document.getElementById('filter-label');
+  if (lbl) {
+    if      (mode === 'all')    lbl.textContent = 'Showing all deals';
+    else if (mode === 'today')  lbl.textContent = 'Today';
+    else if (mode === 'week')   lbl.textContent = 'This week';
+    else if (mode === 'month')  lbl.textContent = 'This month';
+    else if (mode === 'year')   lbl.textContent = 'This year';
+    else if (filterFrom && filterTo) lbl.textContent = `${filterFrom} → ${filterTo}`;
+    else lbl.textContent = '';
+  }
+
   loadAll();
 }
 

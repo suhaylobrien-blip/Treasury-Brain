@@ -19,7 +19,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.
 with open(CONFIG_PATH) as f:
     CONFIG = json.load(f)
 
-INBOX = os.path.join(os.path.dirname(__file__), '..', CONFIG['inbox_folder'])
+INBOX = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', CONFIG['inbox_folder']))
 VALID_EXTENSIONS = {'.xlsx', '.xls', '.xlsm'}
 
 

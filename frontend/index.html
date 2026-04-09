@@ -17,6 +17,7 @@
     <span id="live-clock"></span>
     <span id="spot-gold"   class="spot-badge gold">Au –</span>
     <span id="spot-silver" class="spot-badge silver">Ag –</span>
+    <button class="btn-refresh" onclick="loadAll()">↻ Refresh</button>
     <button class="btn-refresh" onclick="refreshSpot()">↻ Spot</button>
   </div>
 </header>
@@ -169,6 +170,25 @@
   </div>
 
   <!-- ═══════════════════════════════════════════
+       DATE FILTER (standalone — affects all sections)
+  ═══════════════════════════════════════════ -->
+  <div class="filter-toolbar standalone">
+    <div class="filter-pills">
+      <button class="pill active" onclick="setFilter('all',   this)">All</button>
+      <button class="pill"        onclick="setFilter('today', this)">Today</button>
+      <button class="pill"        onclick="setFilter('week',  this)">This Week</button>
+      <button class="pill"        onclick="setFilter('month', this)">This Month</button>
+      <button class="pill"        onclick="setFilter('year',  this)">This Year</button>
+    </div>
+    <div class="filter-custom">
+      <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
+      <span class="filter-sep">–</span>
+      <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
+    </div>
+    <span id="filter-label" class="filter-desc"></span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
        DEALER BREAKDOWN
   ═══════════════════════════════════════════ -->
   <section class="card full-width">
@@ -278,21 +298,6 @@
       </div>
     </div>
 
-    <!-- ── DATE FILTER TOOLBAR ── -->
-    <div class="filter-toolbar">
-      <div class="filter-pills">
-        <button class="pill active" onclick="setFilter('all',   this)">All</button>
-        <button class="pill"        onclick="setFilter('today', this)">Today</button>
-        <button class="pill"        onclick="setFilter('week',  this)">This Week</button>
-        <button class="pill"        onclick="setFilter('month', this)">This Month</button>
-        <button class="pill"        onclick="setFilter('year',  this)">This Year</button>
-      </div>
-      <div class="filter-custom">
-        <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
-        <span class="filter-sep">–</span>
-        <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
-      </div>
-    </div>
     <div class="table-wrap">
       <table id="deals-table">
         <thead>

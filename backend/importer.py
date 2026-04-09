@@ -207,14 +207,30 @@ def _deal_type_from_movement(movement: str) -> str:
     return 'buy' if 'buyback' in str(movement).lower() else 'sell'
 
 
+# Known digital platforms — anything else in Source Channel is a dealer name
+DIGITAL_PLATFORMS = {
+    'goldstore', 'gold store', 'web', 'app', 'online',
+    'digital', 'website', 'portal',
+}
+
+
 def _channel_from_source(source: str) -> str:
-    """MT → dealer, Goldstore/Treasury/etc → digital."""
-    if pd.isna(source):
+    """Digital platforms → 'digital'.  Named dealers (MT, Nate, Grant, etc.) → 'dealer'."""
+    if pd.isna(source) or str(source).strip() == '':
         return 'dealer'
-    s = str(source).strip().lower()
-    if s == 'mt':
-        return 'dealer'
-    return 'digital'
+    return 'digital' if str(source).strip().lower() in DIGITAL_PLATFORMS else 'dealer'
+
+
+def _dealer_from_source(source: str) -> str:
+    """
+    Return the dealer name from the Source Channel field.
+    Named people (MT, Nate, Grant, Thakier, etc.) → their name.
+    Digital platforms (Goldstore, web, app, etc.) → '' (no dealer).
+    """
+    if pd.isna(source) or str(source).strip() == '':
+        return ''
+    s = str(source).strip()
+    return '' if s.lower() in DIGITAL_PLATFORMS else s
 
 
 def _silo_from_movement(movement: str) -> str:
@@ -322,16 +338,17 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
             movement = str(row.get('movement', '') or '')
             source   = str(row.get('channel_raw', '') or '')
 
-            # product_type: proof colour → 'proof', else 'bullion'
             product_type = 'proof' if status == 'proof' else 'bullion'
-            # For DB purposes proof deals are also 'confirmed' (they're real deals)
-            db_status = 'confirmed' if status in ('confirmed', 'proof') else 'quote'
+            db_status    = 'confirmed' if status in ('confirmed', 'proof') else 'quote'
 
             deals.append({
                 'entity':         entity,
                 'metal':          metal,
                 'deal_type':      deal_type,
                 'deal_date':      deal_date,
+                # dealer_name = the SA Bullion dealer (from Source Channel)
+                # client_name = the client they dealt with
+                'dealer_name':    _dealer_from_source(source),
                 'client_name':    str(row.get('client_name', '') or ''),
                 'silo':           _silo_from_movement(movement),
                 'channel':        _channel_from_source(source),
@@ -342,8 +359,8 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
                 'spot_price_zar': spot,
                 'margin_pct':     margin,
                 'source_file':    source_file,
-                'status':         db_status,      # confirmed | quote
-                'product_type':   product_type,   # bullion | proof
+                'status':         db_status,
+                'product_type':   product_type,
             })
 
     return deals
@@ -640,7 +657,7 @@ def _process_row(row: dict, source_file: str) -> dict:
         'metal':               metal,
         'deal_type':           deal_type,
         'deal_date':           deal_date,
-        'dealer_name':         str(row.get('dealer_name', row.get('client_name', ''))),
+        'dealer_name':         str(row.get('dealer_name', '')),
         'silo':                silo,
         'channel':             channel,
         'product_code':        str(row.get('product_code', '')),
