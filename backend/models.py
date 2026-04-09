@@ -57,7 +57,41 @@ def init_db():
         inventory_after_oz   REAL,
         provision_flipped    INTEGER DEFAULT 0,
         source_file          TEXT,
-        created_at           TEXT    DEFAULT (datetime('now'))
+        created_at           TEXT    DEFAULT (datetime('now')),
+        -- deal classification from row colour in Excel
+        status               TEXT    DEFAULT 'confirmed',  -- confirmed | quote | proof
+        product_type         TEXT    DEFAULT 'bullion'     -- bullion | proof
+    )""")
+
+    # ── MIGRATE existing DB: add new columns if absent ───────────────────
+    for col, definition in [
+        ('status',       "TEXT DEFAULT 'confirmed'"),
+        ('product_type', "TEXT DEFAULT 'bullion'"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE deals ADD COLUMN {col} {definition}")
+        except Exception:
+            pass  # column already exists
+
+    # ── PIPELINE (quotes — yellow rows) ──────────────────────────────────
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS pipeline (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity          TEXT    NOT NULL,
+        metal           TEXT    NOT NULL,
+        deal_type       TEXT    NOT NULL,
+        deal_date       TEXT,
+        client_name     TEXT,
+        product_name    TEXT,
+        product_code    TEXT,
+        units           REAL,
+        oz              REAL,
+        spot_price_zar  REAL,
+        margin_pct      REAL,
+        deal_value_zar  REAL,
+        product_type    TEXT    DEFAULT 'bullion',
+        source_file     TEXT,
+        created_at      TEXT    DEFAULT (datetime('now'))
     )""")
 
     # ── INVENTORY ────────────────────────────────────────────────────────
@@ -204,6 +238,18 @@ def init_db():
 # ─────────────────────────────────────────────
 # DEAL OPERATIONS
 # ─────────────────────────────────────────────
+
+def insert_pipeline(record: dict) -> int:
+    conn = get_conn()
+    c    = conn.cursor()
+    cols = ', '.join(record.keys())
+    phs  = ', '.join(['?'] * len(record))
+    c.execute(f"INSERT INTO pipeline ({cols}) VALUES ({phs})", list(record.values()))
+    row_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return row_id
+
 
 def insert_deal(deal: dict) -> int:
     conn = get_conn()

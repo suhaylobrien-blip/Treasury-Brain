@@ -146,29 +146,65 @@ function renderDealsTable(deals) {
     return;
   }
 
-  deals.forEach(d => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${d.id}</td>
-      <td>${d.deal_date}</td>
-      <td class="${d.deal_type}">${d.deal_type === 'buy' ? 'Buyback' : 'Sale'}</td>
-      <td>${d.dealer_name || '–'}</td>
-      <td>${d.silo       || '–'}</td>
-      <td>${d.channel    || '–'}</td>
-      <td>${d.product_name || d.product_code || '–'}</td>
-      <td>${fmt(d.units)}</td>
-      <td>${fmt(d.oz, 4)}</td>
-      <td>${formatZAR(d.spot_price_zar)}</td>
-      <td>${fmt(d.margin_pct, 2)}%</td>
-      <td>${formatZAR(d.deal_value_zar)}</td>
-      <td>${fmt(d.provision_pct, 1)}%</td>
-      <td class="${(d.profit_margin_pct || 0) >= 0 ? 'sell' : 'buy'}">${fmt(d.profit_margin_pct, 2)}%</td>
-      <td>${formatZAR(d.gp_contribution_zar)}</td>
-      <td>${fmt(d.inventory_after_oz, 4)}</td>
-      <td>${d.provision_flipped ? 'YES' : '–'}</td>
-    `;
-    tbody.appendChild(tr);
+  // Group by date (deals arrive newest-first, so reverse for chronological display)
+  const byDate = {};
+  [...deals].reverse().forEach(d => {
+    const dt = d.deal_date || 'Unknown';
+    if (!byDate[dt]) byDate[dt] = [];
+    byDate[dt].push(d);
   });
+
+  // Render each day with a date separator row
+  Object.entries(byDate).forEach(([dateStr, dayDeals]) => {
+    // Date header row
+    const dateRow = document.createElement('tr');
+    dateRow.className = 'date-separator';
+    const buyCount  = dayDeals.filter(d => d.deal_type === 'buy').length;
+    const sellCount = dayDeals.filter(d => d.deal_type === 'sell').length;
+    const dayGP     = dayDeals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+    dateRow.innerHTML = `
+      <td colspan="17">
+        <span class="date-sep-label">${formatDate(dateStr)}</span>
+        <span class="date-sep-meta">${dayDeals.length} deals &nbsp;·&nbsp; ${buyCount} buybacks &nbsp;·&nbsp; ${sellCount} sales &nbsp;·&nbsp; GP ${formatZAR(dayGP)}</span>
+      </td>
+    `;
+    tbody.appendChild(dateRow);
+
+    // Deal rows for this day
+    dayDeals.forEach(d => {
+      const isProof = d.product_type === 'proof';
+      const tr = document.createElement('tr');
+      if (isProof) tr.className = 'proof-row';
+      tr.innerHTML = `
+        <td>${d.id}</td>
+        <td>–</td>
+        <td class="${d.deal_type}">${d.deal_type === 'buy' ? 'Buyback' : 'Sale'}</td>
+        <td>${d.dealer_name || '–'}</td>
+        <td>${d.silo     || '–'}</td>
+        <td>${d.channel  || '–'}</td>
+        <td>${d.product_name || d.product_code || '–'}${isProof ? ' <span class="proof-badge">Proof</span>' : ''}</td>
+        <td>${fmt(d.units)}</td>
+        <td>${fmt(d.oz, 4)}</td>
+        <td>${formatZAR(d.spot_price_zar)}</td>
+        <td>${fmt(d.margin_pct, 2)}%</td>
+        <td>${formatZAR(d.deal_value_zar)}</td>
+        <td>${fmt(d.provision_pct, 1)}%</td>
+        <td class="${(d.profit_margin_pct || 0) >= 0 ? 'sell' : 'buy'}">${fmt(d.profit_margin_pct, 2)}%</td>
+        <td>${formatZAR(d.gp_contribution_zar)}</td>
+        <td>${fmt(d.inventory_after_oz, 4)}</td>
+        <td>${d.provision_flipped ? 'YES' : '–'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+function formatDate(iso) {
+  if (!iso || iso === 'Unknown') return 'Unknown Date';
+  try {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch { return iso; }
 }
 
 // ─── AGED INVENTORY ───────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ from processor import (
     calc_gp_contribution, margin_vs_provision
 )
 from models import (
-    get_inventory, get_latest_spot, insert_deal,
+    get_inventory, get_latest_spot, insert_deal, insert_pipeline,
     update_inventory, insert_cash_flow
 )
 
@@ -37,23 +37,130 @@ os.makedirs(ERRORS,    exist_ok=True)
 # SABIS DEALING SHEET — TAB DETECTION
 # ─────────────────────────────────────────────
 
-# Keywords that identify a tab as containing deal data
-DEAL_TAB_KEYWORDS = ['dealing', 'bullion', 'gold excl']
-SKIP_TAB_KEYWORDS = ['mastersheet', 'tables', 'data', 'mt only']
+# Tabs to always ignore regardless of other keywords
+SKIP_TAB_KEYWORDS = [
+    'mastersheet', 'tables', 'data', 'mt only', 'summary',
+    'prices', 'spot', 'settings', 'config', 'pivot', 'index',
+    'ref', 'rates', 'holiday', 'calendar',
+]
+
+# Keywords that confirm a tab contains deal data
+DEAL_TAB_KEYWORDS = [
+    'dealing', 'bullion', 'gold', 'silver', 'bar', 'coin', 'kr',
+]
 
 
 def _is_deal_tab(name: str) -> bool:
-    n = name.lower()
+    n = name.lower().strip()
     if any(skip in n for skip in SKIP_TAB_KEYWORDS):
         return False
     return any(kw in n for kw in DEAL_TAB_KEYWORDS)
 
 
 def _metal_from_tab(name: str) -> str:
-    n = name.lower()
-    if 'silver' in n:
+    """
+    Silver / SKR tabs → silver.
+    KR, Gold bullion, gold bars, gold coins → gold.
+    """
+    n = name.lower().strip()
+    # Silver Krugerrand or any silver tab
+    if 'silver' in n or n.startswith('skr'):
         return 'silver'
-    return 'gold'  # KR, Gold Excl KRs, etc.
+    return 'gold'
+
+
+# ─────────────────────────────────────────────
+# ROW COLOUR CLASSIFICATION
+# ─────────────────────────────────────────────
+
+def _get_cell_rgb(cell) -> str:
+    """Return RRGGBB hex string from a cell's solid fill, or '' if none."""
+    try:
+        fill = cell.fill
+        if not fill or fill.fill_type != 'solid':
+            return ''
+        fc = fill.fgColor
+        if fc.type == 'rgb':
+            return fc.rgb[-6:]        # last 6 of AARRGGBB
+        if fc.type == 'indexed' and fc.indexed not in (0, 64, 65):
+            # index 64/65 = no fill; 0 = black — skip those
+            return ''
+    except Exception:
+        pass
+    return ''
+
+
+def _classify_rgb(rgb6: str) -> str:
+    """
+    Classify a 6-char hex colour (RRGGBB) into deal status.
+
+    Orange → 'confirmed'  (standard confirmed bullion/coin deal)
+    Yellow → 'quote'      (pipeline — not yet confirmed)
+    Blue   → 'proof'      (proof coin deal — track separately)
+    White / empty → ''    (no colour → skip / header row)
+    Other  → 'confirmed'  (any other colour = treat as confirmed)
+    """
+    if not rgb6 or len(rgb6) < 6:
+        return ''
+    try:
+        r = int(rgb6[0:2], 16)
+        g = int(rgb6[2:4], 16)
+        b = int(rgb6[4:6], 16)
+    except ValueError:
+        return ''
+
+    # Near-white → no colour (skip)
+    if r > 240 and g > 240 and b > 240:
+        return ''
+    # Near-black → skip
+    if r < 20 and g < 20 and b < 20:
+        return ''
+
+    # Blue: dominant blue channel (proof coins)
+    if b > 130 and b > r + 40:
+        return 'proof'
+
+    # Yellow: high R + high G, low B  (quote / pipeline)
+    if r > 180 and g > 180 and b < 100:
+        return 'quote'
+
+    # Orange: high R, mid G, low B  (confirmed bullion)
+    if r > 180 and 60 <= g <= 200 and b < 80:
+        return 'confirmed'
+
+    # Anything else → treat as confirmed
+    return 'confirmed'
+
+
+def _read_row_statuses(workbook_path: str, sheet_name: str) -> dict:
+    """
+    Opens workbook with openpyxl (full mode, not read_only) and reads
+    the fill colour of the first non-empty cell in each row.
+    Returns {excel_row_number: status_string}.
+    status_string: 'confirmed' | 'quote' | 'proof' | ''
+    """
+    from openpyxl import load_workbook
+    import warnings
+    warnings.filterwarnings('ignore')
+    try:
+        wb = load_workbook(workbook_path, data_only=True)
+        ws = wb[sheet_name]
+        statuses = {}
+        for row in ws.iter_rows():
+            row_num = row[0].row
+            status  = ''
+            for cell in row:
+                rgb = _get_cell_rgb(cell)
+                s   = _classify_rgb(rgb)
+                if s:
+                    status = s
+                    break
+            statuses[row_num] = status
+        wb.close()
+        return statuses
+    except Exception as e:
+        print(f"    [colour] Could not read colours from '{sheet_name}': {e}")
+        return {}
 
 
 # ─────────────────────────────────────────────
@@ -143,16 +250,25 @@ def _extract_half(df: pd.DataFrame, suffix: str = '') -> pd.DataFrame:
 
 
 def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
-                    source_file: str) -> list:
+                    source_file: str,
+                    row_statuses: dict = None) -> list:
     """
     Parse all deals from a single sheet tab (one half at a time).
     Left half (no suffix) = BUYBACKS (buys).
     Right half (.1 suffix) = SALES (sells).
+
+    row_statuses: {excel_row_number: 'confirmed'|'quote'|'proof'|''}
+      - pandas row index 0 → excel row 2 (header is row 1)
+      - confirmed / proof → import as deal
+      - quote → import as pipeline entry only
+      - '' (no colour) → skip (header / blank row)
+
     Returns list of normalised deal dicts ready for _process_row.
+    Each dict includes 'status' and 'product_type' fields.
     """
     deals = []
+    has_colours = bool(row_statuses)
 
-    # Left = buy, Right = sell — determined by position, not text content
     side_deal_type = {'': 'buy', '.1': 'sell'}
 
     for suffix in ['', '.1']:
@@ -160,16 +276,23 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
         half = _map_sabis_cols(half)
         deal_type = side_deal_type[suffix]
 
-        # Keep only rows that have a spot price (actual deal rows)
         if 'spot_price_zar' not in half.columns:
             continue
 
-        # Forward-fill dates (date only appears on first row of each group)
         if 'deal_date' in half.columns:
             half['deal_date'] = half['deal_date'].ffill()
 
-        for _, row in half.iterrows():
-            # Skip rows with no spot price or no units
+        for pandas_idx, row in half.iterrows():
+            # Determine row status from colour
+            if has_colours:
+                # pandas row 0 → excel row 2 (1-indexed, with header at row 1)
+                excel_row = pandas_idx + 2
+                status = row_statuses.get(excel_row, '')
+                if not status:
+                    continue   # no colour → skip (blank / header row)
+            else:
+                status = 'confirmed'  # no colour data → treat all as confirmed
+
             try:
                 spot  = float(row.get('spot_price_zar', ''))
                 units = float(row.get('units', ''))
@@ -180,16 +303,13 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
             if spot == 0 or units == 0:
                 continue
 
-            # Margin — handle % expressed as decimal (e.g. 0.115 = 11.5%)
             try:
                 margin = float(row.get('margin_pct', 0) or 0)
-                # If margin looks like a decimal proportion rather than percent
                 if -1 < margin < 1 and margin != 0:
                     margin = margin * 100
             except (ValueError, TypeError):
                 margin = 0.0
 
-            # Deal date
             raw_date = row.get('deal_date')
             if pd.isna(raw_date) or raw_date == '' or raw_date is None:
                 deal_date = date.today().isoformat()
@@ -202,21 +322,28 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
             movement = str(row.get('movement', '') or '')
             source   = str(row.get('channel_raw', '') or '')
 
+            # product_type: proof colour → 'proof', else 'bullion'
+            product_type = 'proof' if status == 'proof' else 'bullion'
+            # For DB purposes proof deals are also 'confirmed' (they're real deals)
+            db_status = 'confirmed' if status in ('confirmed', 'proof') else 'quote'
+
             deals.append({
-                'entity':        entity,
-                'metal':         metal,
-                'deal_type':     deal_type,   # left=buy, right=sell
-                'deal_date':     deal_date,
-                'client_name':   str(row.get('client_name', '') or ''),
-                'silo':          _silo_from_movement(movement),
-                'channel':       _channel_from_source(source),
-                'product_code':  str(row.get('product_code', '') or ''),
-                'product_name':  str(row.get('product_name', '') or ''),
-                'units':         units,
-                'equiv_oz':      equiv,
+                'entity':         entity,
+                'metal':          metal,
+                'deal_type':      deal_type,
+                'deal_date':      deal_date,
+                'client_name':    str(row.get('client_name', '') or ''),
+                'silo':           _silo_from_movement(movement),
+                'channel':        _channel_from_source(source),
+                'product_code':   str(row.get('product_code', '') or ''),
+                'product_name':   str(row.get('product_name', '') or ''),
+                'units':          units,
+                'equiv_oz':       equiv,
                 'spot_price_zar': spot,
-                'margin_pct':    margin,
-                'source_file':   source_file,
+                'margin_pct':     margin,
+                'source_file':    source_file,
+                'status':         db_status,      # confirmed | quote
+                'product_type':   product_type,   # bullion | proof
             })
 
     return deals
@@ -285,12 +412,22 @@ def _process_sabis_file(filepath: str, filename: str,
                         read_from: str = None) -> dict:
     """Process an SABIS-format dealing workbook (multi-tab, split columns)."""
     src = read_from or filepath
-    all_errors    = []
+    all_errors      = []
     processed_deals = []
+    pipeline_deals  = []
+
+    print(f"  Deal tabs detected: {deal_tabs}")
 
     for tab in deal_tabs:
         metal = _metal_from_tab(tab)
-        print(f"  Reading tab: '{tab}' -> metal={metal}")
+        print(f"  Tab: '{tab}' -> metal={metal}")
+
+        # Read row colours with openpyxl (uses full mode, not read_only)
+        row_statuses = _read_row_statuses(src, tab)
+        colour_counts = {}
+        for s in row_statuses.values():
+            colour_counts[s or 'none'] = colour_counts.get(s or 'none', 0) + 1
+        print(f"    Row colours: {colour_counts}")
 
         try:
             df = pd.read_excel(src, sheet_name=tab, dtype=str, header=0,
@@ -299,10 +436,13 @@ def _process_sabis_file(filepath: str, filename: str,
             all_errors.append(f"Tab '{tab}': could not read — {e}")
             continue
 
-        deals = _parse_deal_tab(df, metal, entity, filename)
-        print(f"    Found {len(deals)} deal rows")
+        deals = _parse_deal_tab(df, metal, entity, filename, row_statuses)
+        confirmed = [d for d in deals if d['status'] == 'confirmed']
+        quotes    = [d for d in deals if d['status'] == 'quote']
+        print(f"    Confirmed: {len(confirmed)}  |  Quotes: {len(quotes)}")
 
-        for deal in deals:
+        # Insert confirmed (including proof) deals into deals table
+        for deal in confirmed:
             try:
                 result = _process_row(deal, filename)
                 if result:
@@ -310,20 +450,51 @@ def _process_sabis_file(filepath: str, filename: str,
             except Exception as e:
                 all_errors.append(f"Tab '{tab}': row error — {e}")
 
-    if not processed_deals:
+        # Insert quotes into pipeline table
+        for deal in quotes:
+            try:
+                _insert_pipeline_row(deal)
+                pipeline_deals.append(deal)
+            except Exception as e:
+                all_errors.append(f"Tab '{tab}': pipeline row error — {e}")
+
+    if not processed_deals and not pipeline_deals:
         _move_to_errors(filepath, '\n'.join(all_errors) if all_errors
-                        else 'No valid deal rows found in any tab.')
+                        else 'No coloured deal rows found. Check orange/yellow/blue row highlighting.')
         return {'status': 'error', 'file': filename, 'errors': all_errors}
 
     _move_to_processed(filepath)
-    print(f"✅ Imported {len(processed_deals)} deals. Warnings: {len(all_errors)}")
+    print(f"Imported {len(processed_deals)} confirmed deals, "
+          f"{len(pipeline_deals)} pipeline quotes. Warnings: {len(all_errors)}")
     return {
-        'status':         'success' if not all_errors else 'partial',
-        'file':           filename,
-        'deals_imported': len(processed_deals),
-        'warnings':       all_errors,
-        'deals':          processed_deals,
+        'status':           'success' if not all_errors else 'partial',
+        'file':             filename,
+        'deals_imported':   len(processed_deals),
+        'pipeline_imported': len(pipeline_deals),
+        'warnings':         all_errors,
+        'deals':            processed_deals,
     }
+
+
+def _insert_pipeline_row(deal: dict):
+    """Save a quote/pipeline deal to the pipeline table."""
+    record = {
+        'entity':         deal['entity'],
+        'metal':          deal['metal'],
+        'deal_type':      deal['deal_type'],
+        'deal_date':      deal.get('deal_date', ''),
+        'client_name':    deal.get('client_name', ''),
+        'product_name':   deal.get('product_name', ''),
+        'product_code':   deal.get('product_code', ''),
+        'units':          deal.get('units', 0),
+        'oz':             deal.get('units', 0) * deal.get('equiv_oz', 1.0),
+        'spot_price_zar': deal.get('spot_price_zar', 0),
+        'margin_pct':     deal.get('margin_pct', 0),
+        'deal_value_zar': deal.get('spot_price_zar', 0) * deal.get('units', 0) * deal.get('equiv_oz', 1.0),
+        'product_type':   deal.get('product_type', 'bullion'),
+        'source_file':    deal.get('source_file', ''),
+    }
+    insert_pipeline(record)
 
 
 # ─────────────────────────────────────────────
@@ -478,6 +649,8 @@ def _process_row(row: dict, source_file: str) -> dict:
         'inventory_after_oz':  new_inventory,
         'provision_flipped':   1 if flipped else 0,
         'source_file':         source_file,
+        'status':              str(row.get('status', 'confirmed')),
+        'product_type':        str(row.get('product_type', 'bullion')),
     }
 
     deal_id = insert_deal(deal_record)

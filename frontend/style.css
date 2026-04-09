@@ -517,6 +517,45 @@ td.sell    { color: var(--gold);   font-weight: 600; }
 td.flagged { color: var(--red);    font-weight: 700; }
 td.active  { color: var(--green); }
 
+/* Date separator rows */
+tr.date-separator td {
+  background: rgba(123,79,201,0.12);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+}
+.date-sep-label {
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-right: 16px;
+}
+.date-sep-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Proof coin rows and badge */
+tr.proof-row td { background: rgba(64,70,180,0.08); }
+tr.proof-row:hover td { background: rgba(64,70,180,0.14); }
+.proof-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(80,120,220,0.2);
+  color: #7EB3F5;
+  border: 1px solid rgba(80,120,220,0.4);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* ── LIVE CLOCK ─────────────────────────────────────────────────────────── */
 #live-clock {
   color: var(--muted);
