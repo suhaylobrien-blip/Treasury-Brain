@@ -480,16 +480,24 @@ def _process_sabis_file(filepath: str, filename: str,
                         else 'No coloured deal rows found. Check orange/yellow/blue row highlighting.')
         return {'status': 'error', 'file': filename, 'errors': all_errors}
 
+    # Per-metal breakdown
+    metal_breakdown = {}
+    for d in processed_deals:
+        m = d.get('metal', 'unknown')
+        metal_breakdown[m] = metal_breakdown.get(m, 0) + 1
+
     _move_to_processed(filepath)
-    print(f"Imported {len(processed_deals)} confirmed deals, "
+    print(f"Imported {len(processed_deals)} confirmed deals "
+          f"({metal_breakdown}), "
           f"{len(pipeline_deals)} pipeline quotes. Warnings: {len(all_errors)}")
     return {
-        'status':           'success' if not all_errors else 'partial',
-        'file':             filename,
-        'deals_imported':   len(processed_deals),
+        'status':            'success' if not all_errors else 'partial',
+        'file':              filename,
+        'deals_imported':    len(processed_deals),
         'pipeline_imported': len(pipeline_deals),
-        'warnings':         all_errors,
-        'deals':            processed_deals,
+        'metal_breakdown':   metal_breakdown,
+        'warnings':          all_errors,
+        'deals':             processed_deals,
     }
 
 

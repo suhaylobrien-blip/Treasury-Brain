@@ -429,12 +429,16 @@ function renderPreview(r) {
 
 async function resetData() {
   const confirmed = window.confirm(
-    `Clear ALL deals and inventory for ${currentEntity} / ${currentMetal}?\n\nThis cannot be undone. Re-upload the dealer sheet after resetting.`
+    `Clear ALL deals and inventory for ${currentEntity} (gold + silver)?\n\nThis cannot be undone. Re-upload the dealer sheet after resetting.`
   );
   if (!confirmed) return;
   try {
-    const r = await api('/api/reset', { method: 'POST', json: { entity: currentEntity, metal: currentMetal } });
-    showToast(`Reset complete: ${r.cleared} — re-upload your sheet`);
+    // Reset both metals so a single re-upload repopulates everything cleanly
+    await Promise.all([
+      api('/api/reset', { method: 'POST', json: { entity: currentEntity, metal: 'gold' } }),
+      api('/api/reset', { method: 'POST', json: { entity: currentEntity, metal: 'silver' } }),
+    ]);
+    showToast(`Reset complete: ${currentEntity} gold + silver — re-upload your sheet`);
     loadAll();
   } catch (e) {
     showToast('Reset failed: ' + e.message, true);
@@ -457,7 +461,14 @@ async function uploadFile(input) {
     if (result.status === 'error') {
       showToast(`Import failed: ${result.errors?.join(', ') || result.error}`, true);
     } else {
-      showToast(`Imported ${result.deals_imported} deals`);
+      const breakdown = result.metal_breakdown || {};
+      const parts = Object.entries(breakdown)
+        .map(([m, n]) => `${n} ${m}`)
+        .join(', ');
+      const msg = parts
+        ? `Imported ${result.deals_imported} deals (${parts}) — switch the metal tab to view each`
+        : `Imported ${result.deals_imported} deals`;
+      showToast(msg);
       loadAll();
     }
   } catch (e) {
