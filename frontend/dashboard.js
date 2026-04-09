@@ -135,11 +135,11 @@ function renderExposure(deals, inv, hedging) {
   const bullionOz = inv.total_oz  || 0;
   const hedgeNet  = (hedging && hedging.net_oz) || 0;
 
-  // Ecosystem net = bullion/physical inventory + net hedge positions
+  // Ecosystem net = bullion/physical inventory + net hedge positions (for exposure display)
   const ecosystemOz = bullionOz + hedgeNet;
 
-  // Provision mode driven by ecosystem net, not raw bullion alone
-  const provActive = ecosystemOz < 0;
+  // Provision mode driven by PHYSICAL inventory only — hedges are irrelevant to provision
+  const provActive = bullionOz < 0;
   const provRate   = (inv.provision || {}).rate_pct || 0;
 
   const totalGP = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
@@ -150,7 +150,7 @@ function renderExposure(deals, inv, hedging) {
   set('exp-gp-sub',    `${deals.length} deal${deals.length !== 1 ? 's' : ''} total`);
   set('exp-spot',      formatZAR(spot));
   set('exp-provision', provActive ? 'PROVISION' : 'NO PROVISION');
-  set('exp-prov-sub',  provActive ? `${provRate}% applies` : 'Hedged to neutral');
+  set('exp-prov-sub',  provActive ? `${provRate}% applies` : `Physical: ${fmt(bullionOz, 2)} oz`);
 
   const provCard = document.getElementById('exp-card-provision');
   if (provCard) {
