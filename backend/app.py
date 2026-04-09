@@ -1,0 +1,282 @@
+"""
+Treasury Brain — Flask Web Server
+API endpoints + serves the web dashboard.
+"""
+
+import json
+import os
+from datetime import date, datetime
+from flask import Flask, jsonify, request, send_from_directory, abort
+
+from models import (
+    get_deals, get_inventory, get_aged_inventory, get_latest_spot,
+    get_cash_flows, insert_spot_price, init_db
+)
+from processor import (
+    get_provision_mode, live_impact_preview, build_daily_summary,
+    calc_silo_analytics, calc_channel_analytics, flag_dormant, optimal_exit_suggestion
+)
+from importer import process_file
+from spot_prices import fetch_all_spots
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
+with open(CONFIG_PATH) as f:
+    CONFIG = json.load(f)
+
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+INBOX_DIR    = os.path.join(os.path.dirname(__file__), '..', CONFIG['inbox_folder'])
+
+app = Flask(__name__, static_folder=FRONTEND_DIR)
+
+
+# ─────────────────────────────────────────────
+# SERVE FRONTEND
+# ─────────────────────────────────────────────
+
+@app.route('/')
+def index():
+    return send_from_directory(FRONTEND_DIR, 'index.html')
+
+
+@app.route('/<path:filename>')
+def static_files(filename):
+    return send_from_directory(FRONTEND_DIR, filename)
+
+
+# ─────────────────────────────────────────────
+# DASHBOARD DATA
+# ─────────────────────────────────────────────
+
+@app.route('/api/dashboard')
+def dashboard():
+    """Full dashboard snapshot: all entities, all metals."""
+    entities = CONFIG['entities']
+    metals   = CONFIG['metals']
+    today    = date.today().isoformat()
+    result   = {}
+
+    for entity in entities:
+        result[entity] = {}
+        for metal in metals:
+            inventory_oz = get_inventory(entity, metal)
+            spot         = get_latest_spot(metal)
+            provision    = get_provision_mode(inventory_oz, metal)
+            deals_today  = get_deals(entity, metal, today)
+
+            summary = build_daily_summary(entity, metal, deals_today, inventory_oz, spot)
+
+            result[entity][metal] = {
+                'inventory_oz':       round(inventory_oz, 6),
+                'inventory_value_zar': round(inventory_oz * spot, 2),
+                'spot_price_zar':     spot,
+                'provision_mode':     provision,
+                'deal_count_today':   len(deals_today),
+                'total_gp_today':     summary['total_gp_zar'],
+                'buy_vwap':           summary['buy_vwap'],
+                'sell_vwap':          summary['sell_vwap'],
+                'buy_margin_vwap':    summary['buy_margin_vwap'],
+                'sell_margin_vwap':   summary['sell_margin_vwap'],
+                'silo_analytics':     summary['silo_analytics'],
+                'channel_analytics':  summary['channel_analytics'],
+            }
+
+    return jsonify(result)
+
+
+@app.route('/api/deals')
+def deals_endpoint():
+    """Return deals, filtered by entity, metal, and optional date."""
+    entity    = request.args.get('entity', 'SABIS')
+    metal     = request.args.get('metal', 'gold')
+    deal_date = request.args.get('date')
+    deals     = get_deals(entity, metal, deal_date)
+    return jsonify(deals)
+
+
+@app.route('/api/inventory')
+def inventory_endpoint():
+    """Return current inventory for a given entity + metal."""
+    entity   = request.args.get('entity', 'SABIS')
+    metal    = request.args.get('metal', 'gold')
+    oz       = get_inventory(entity, metal)
+    spot     = get_latest_spot(metal)
+    aged     = get_aged_inventory(entity, metal)
+
+    dormant_parcels = []
+    for parcel in aged:
+        acq = datetime.strptime(parcel['acquired_date'], '%Y-%m-%d').date()
+        dom = flag_dormant(acq)
+        parcel['dormancy'] = dom
+        if dom['flagged']:
+            parcel['exit_suggestion'] = optimal_exit_suggestion(
+                {**parcel, 'metal': metal}, spot,
+                get_provision_mode(oz, metal)['rate_pct']
+            )
+        dormant_parcels.append(parcel)
+
+    return jsonify({
+        'entity':      entity,
+        'metal':       metal,
+        'total_oz':    round(oz, 6),
+        'spot_zar':    spot,
+        'value_zar':   round(oz * spot, 2),
+        'provision':   get_provision_mode(oz, metal),
+        'aged_parcels': dormant_parcels,
+    })
+
+
+@app.route('/api/cash-flows')
+def cash_flows_endpoint():
+    """Return cash flows for an entity, with optional date range."""
+    entity    = request.args.get('entity', 'SABIS')
+    from_date = request.args.get('from')
+    to_date   = request.args.get('to')
+    flows     = get_cash_flows(entity, from_date, to_date)
+    return jsonify(flows)
+
+
+@app.route('/api/spot')
+def spot_endpoint():
+    """Return latest spot prices for all metals."""
+    return jsonify({
+        metal: get_latest_spot(metal)
+        for metal in CONFIG['metals']
+    })
+
+
+@app.route('/api/spot/refresh', methods=['POST'])
+def refresh_spot():
+    """Fetch fresh spot prices from API."""
+    prices = fetch_all_spots()
+    return jsonify(prices)
+
+
+@app.route('/api/spot/manual', methods=['POST'])
+def manual_spot():
+    """Manually set a spot price. Body: {metal, price_zar}"""
+    data = request.json
+    metal     = data.get('metal')
+    price_zar = data.get('price_zar')
+    if not metal or not price_zar:
+        return jsonify({'error': 'metal and price_zar required'}), 400
+    insert_spot_price(metal, float(price_zar), source='manual')
+    return jsonify({'status': 'ok', 'metal': metal, 'price_zar': price_zar})
+
+
+# ─────────────────────────────────────────────
+# LIVE IMPACT PREVIEW (what-if)
+# ─────────────────────────────────────────────
+
+@app.route('/api/preview', methods=['POST'])
+def preview():
+    """
+    What-if deal preview — shows full impact before confirming.
+    Body: { entity, metal, deal_type, units, equiv_oz, spot_price_zar, margin_pct }
+    """
+    data = request.json
+    entity    = data.get('entity', 'SABIS')
+    metal     = data.get('metal', 'gold')
+    deal_type = data.get('deal_type', 'sell')
+    units     = float(data.get('units', 1))
+    equiv_oz  = float(data.get('equiv_oz', 1.0))
+    spot      = float(data.get('spot_price_zar', get_latest_spot(metal)))
+    margin    = float(data.get('margin_pct', 0))
+
+    oz           = units * equiv_oz
+    inventory_oz = get_inventory(entity, metal)
+    provision    = get_provision_mode(inventory_oz, metal)
+
+    # Build running totals from today's deals for VWAP
+    today       = date.today().isoformat()
+    deals_today = get_deals(entity, metal, today)
+    total_val   = sum(d['deal_value_zar'] for d in deals_today)
+    total_oz    = sum(d['oz'] for d in deals_today)
+
+    deal = {
+        'type':       deal_type,
+        'oz':         oz,
+        'spot_price': spot,
+        'margin_pct': margin,
+        'metal':      metal,
+    }
+    current_state = {
+        'total_value_zar': total_val,
+        'total_oz':        total_oz,
+        'inventory_oz':    inventory_oz,
+        'cash_zar':        0.0,  # cash position not tracked per-session; use cash_flows
+    }
+
+    impact = live_impact_preview(deal, current_state, provision['rate_pct'])
+    impact['entity']   = entity
+    impact['metal']    = metal
+    impact['units']    = units
+    impact['equiv_oz'] = equiv_oz
+    return jsonify(impact)
+
+
+# ─────────────────────────────────────────────
+# SUMMARY / ANALYTICS
+# ─────────────────────────────────────────────
+
+@app.route('/api/summary')
+def summary_endpoint():
+    """Build and return the daily summary for one entity+metal."""
+    entity   = request.args.get('entity', 'SABIS')
+    metal    = request.args.get('metal', 'gold')
+    on_date  = request.args.get('date', date.today().isoformat())
+
+    deals        = get_deals(entity, metal, on_date)
+    inventory_oz = get_inventory(entity, metal)
+    spot         = get_latest_spot(metal)
+    summary      = build_daily_summary(entity, metal, deals, inventory_oz, spot)
+    return jsonify(summary)
+
+
+@app.route('/api/analytics/silo')
+def silo_analytics():
+    entity  = request.args.get('entity', 'SABIS')
+    metal   = request.args.get('metal', 'gold')
+    on_date = request.args.get('date')
+    deals   = get_deals(entity, metal, on_date)
+    return jsonify(calc_silo_analytics(deals))
+
+
+@app.route('/api/analytics/channel')
+def channel_analytics():
+    entity  = request.args.get('entity', 'SABIS')
+    metal   = request.args.get('metal', 'gold')
+    on_date = request.args.get('date')
+    deals   = get_deals(entity, metal, on_date)
+    return jsonify(calc_channel_analytics(deals))
+
+
+# ─────────────────────────────────────────────
+# FILE UPLOAD (manual trigger)
+# ─────────────────────────────────────────────
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    """Upload a dealer Excel file for immediate processing."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    f = request.files['file']
+    if f.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    os.makedirs(INBOX_DIR, exist_ok=True)
+    save_path = os.path.join(INBOX_DIR, f.filename)
+    f.save(save_path)
+
+    result = process_file(save_path)
+    return jsonify(result)
+
+
+# ─────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────
+
+if __name__ == '__main__':
+    init_db()
+    os.makedirs(INBOX_DIR, exist_ok=True)
+    print("Treasury Brain server starting on http://localhost:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)

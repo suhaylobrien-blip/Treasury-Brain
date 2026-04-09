@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+data/treasury.db
+data/inbox/*
+data/processed/*
+data/errors/*
+reports/*
+config/credentials.json
+.env
+*.egg-info/

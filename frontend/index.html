@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Treasury Brain — SA Bullion</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">Treasury Brain</div>
+  <div class="header-meta">
+    <span id="live-clock"></span>
+    <span id="spot-gold" class="spot-badge gold">Au –</span>
+    <span id="spot-silver" class="spot-badge silver">Ag –</span>
+    <button class="btn-refresh" onclick="refreshSpot()">↻ Refresh Spot</button>
+  </div>
+</header>
+
+<!-- Entity tabs -->
+<nav class="entity-tabs">
+  <button class="tab active" onclick="switchEntity('SABIS', this)">SABIS</button>
+  <button class="tab" onclick="switchEntity('SABI', this)">SABI</button>
+  <button class="tab" onclick="switchEntity('SABGB', this)">SABGB</button>
+</nav>
+
+<!-- Metal sub-tabs -->
+<nav class="metal-tabs">
+  <button class="tab active" onclick="switchMetal('gold', this)">Gold</button>
+  <button class="tab" onclick="switchMetal('silver', this)">Silver</button>
+</nav>
+
+<main>
+
+  <!-- ── KPI ROW ── -->
+  <section class="kpi-row">
+    <div class="kpi-card" id="kpi-gp">
+      <div class="kpi-label">Today's GP</div>
+      <div class="kpi-value" id="kpi-gp-val">–</div>
+    </div>
+    <div class="kpi-card" id="kpi-provision">
+      <div class="kpi-label">Provision Mode</div>
+      <div class="kpi-value" id="kpi-provision-val">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Inventory (oz)</div>
+      <div class="kpi-value" id="kpi-inventory-val">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Inventory Value (ZAR)</div>
+      <div class="kpi-value" id="kpi-inv-value-val">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Buy VWAP</div>
+      <div class="kpi-value" id="kpi-buy-vwap">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Sell VWAP</div>
+      <div class="kpi-value" id="kpi-sell-vwap">–</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Deals Today</div>
+      <div class="kpi-value" id="kpi-deal-count">–</div>
+    </div>
+  </section>
+
+  <!-- ── MAIN GRID ── -->
+  <div class="main-grid">
+
+    <!-- LEFT: What-if Preview -->
+    <section class="card preview-panel">
+      <h2>Deal Impact Preview</h2>
+      <div class="form-row">
+        <label>Type
+          <select id="p-type">
+            <option value="sell">Sell</option>
+            <option value="buy">Buy</option>
+          </select>
+        </label>
+        <label>Units
+          <input type="number" id="p-units" value="1" min="0.0001" step="any" />
+        </label>
+        <label>Oz / Unit
+          <input type="number" id="p-equiv-oz" value="1.0" step="any" />
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Spot (ZAR/oz)
+          <input type="number" id="p-spot" step="any" placeholder="auto" />
+        </label>
+        <label>Margin %
+          <input type="number" id="p-margin" value="5.0" step="0.01" />
+        </label>
+        <button class="btn-primary" onclick="runPreview()">Preview Impact</button>
+      </div>
+      <div id="preview-result" class="preview-result hidden"></div>
+    </section>
+
+    <!-- RIGHT: Silo & Channel Charts -->
+    <section class="card">
+      <h2>Silo Breakdown — GP %</h2>
+      <canvas id="silo-chart" height="200"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>Channel Breakdown — GP %</h2>
+      <canvas id="channel-chart" height="200"></canvas>
+    </section>
+
+  </div>
+
+  <!-- ── DEALS TABLE ── -->
+  <section class="card full-width">
+    <div class="card-header">
+      <h2>Today's Deals</h2>
+      <label class="upload-label">
+        Upload Dealer Sheet
+        <input type="file" accept=".xlsx,.xls,.xlsm" onchange="uploadFile(this)" />
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table id="deals-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Date</th><th>Type</th><th>Dealer</th>
+            <th>Silo</th><th>Channel</th><th>Product</th>
+            <th>Units</th><th>Oz</th><th>Spot (ZAR)</th>
+            <th>Margin %</th><th>Deal Value (ZAR)</th>
+            <th>Prov %</th><th>Profit %</th><th>GP (ZAR)</th>
+            <th>Inv After (oz)</th><th>Flipped</th>
+          </tr>
+        </thead>
+        <tbody id="deals-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── AGED INVENTORY ── -->
+  <section class="card full-width">
+    <h2>Aged Inventory</h2>
+    <div class="table-wrap">
+      <table id="aged-table">
+        <thead>
+          <tr>
+            <th>Acquired</th><th>Oz</th><th>Cost (ZAR)</th>
+            <th>Days Held</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="aged-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script src="dashboard.js"></script>
+</body>
+</html>
