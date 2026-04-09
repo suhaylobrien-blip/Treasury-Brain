@@ -1,18 +1,16 @@
 /**
  * Treasury Brain — Dashboard JS
- * Polls API, renders KPIs, charts, tables, and handles deal preview + file upload.
+ * SA Bullion × Apple aesthetic
  */
 
 'use strict';
 
 let currentEntity = 'SABIS';
 let currentMetal  = 'gold';
-let siloChart, channelChart;
-const POLL_INTERVAL = 30_000; // 30s
+let siloChart, channelChart, volumeChart, vwapChart, gpChart;
+const POLL_INTERVAL = 30_000;
 
-// ─────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────
+// ─── INIT ────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
   startClock();
@@ -27,9 +25,7 @@ function startClock() {
   }, 1000);
 }
 
-// ─────────────────────────────────────────────
-// TAB SWITCHING
-// ─────────────────────────────────────────────
+// ─── TAB SWITCHING ────────────────────────────────────────────────────────────
 
 function switchEntity(entity, btn) {
   currentEntity = entity;
@@ -45,63 +41,108 @@ function switchMetal(metal, btn) {
   loadAll();
 }
 
-// ─────────────────────────────────────────────
-// LOAD ALL
-// ─────────────────────────────────────────────
+// ─── LOAD ALL ────────────────────────────────────────────────────────────────
 
 async function loadAll() {
-  await Promise.all([
-    loadDashboard(),
-    loadDeals(),
-    loadAgedInventory(),
-    loadSpot(),
+  const [deals, inv] = await Promise.all([
+    api(`/api/deals?entity=${currentEntity}&metal=${currentMetal}&limit=500`).catch(() => []),
+    api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({})),
   ]);
+
+  renderExposure(deals, inv);
+  renderTrading(deals);
+  renderDealsTable(deals);
+  renderAgedInventory(inv.aged_parcels || []);
+  await loadSpot();
 }
 
-// ─────────────────────────────────────────────
-// DASHBOARD KPIs
-// ─────────────────────────────────────────────
+// ─── EXPOSURE BANNER ─────────────────────────────────────────────────────────
 
-async function loadDashboard() {
-  try {
-    const data = await api('/api/dashboard');
-    const d = data[currentEntity]?.[currentMetal];
-    if (!d) return;
+function renderExposure(deals, inv) {
+  const oz   = inv.total_oz  || 0;
+  const spot = inv.spot_zar  || 0;
+  const prov = inv.provision || {};
 
-    set('kpi-gp-val',        formatZAR(d.total_gp_today));
-    set('kpi-inventory-val', fmt(d.inventory_oz, 6) + ' oz');
-    set('kpi-inv-value-val', formatZAR(d.inventory_value_zar));
-    set('kpi-buy-vwap',      formatZAR(d.buy_vwap));
-    set('kpi-sell-vwap',     formatZAR(d.sell_vwap));
-    set('kpi-deal-count',    d.deal_count_today);
+  const totalGP = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
 
-    // Provision KPI
-    const provEl = document.getElementById('kpi-provision');
-    const mode   = d.provision_mode;
-    set('kpi-provision-val', mode.mode + (mode.active ? ` (${mode.rate_pct}%)` : ''));
-    provEl.classList.toggle('active',   mode.active);
-    provEl.classList.toggle('inactive', !mode.active);
+  set('exp-oz',        fmt(Math.abs(oz), 4) + ' oz' + (oz < 0 ? ' (short)' : ''));
+  set('exp-value-zar', formatZAR(Math.abs(oz * spot)));
+  set('exp-gp',        formatZAR(totalGP));
+  set('exp-gp-sub',    `${deals.length} deal${deals.length !== 1 ? 's' : ''} total`);
+  set('exp-spot',      formatZAR(spot));
+  set('exp-provision', prov.mode || '–');
+  set('exp-prov-sub',  prov.active ? `${prov.rate_pct}% applies` : 'No provision active');
 
-    // Charts
-    renderSiloChart(d.silo_analytics);
-    renderChannelChart(d.channel_analytics);
-
-  } catch (e) {
-    console.error('Dashboard load failed:', e);
+  const provCard = document.getElementById('exp-card-provision');
+  if (provCard) {
+    provCard.classList.toggle('active',   !!prov.active);
+    provCard.classList.toggle('inactive', !prov.active);
   }
 }
 
-// ─────────────────────────────────────────────
-// DEALS TABLE
-// ─────────────────────────────────────────────
+// ─── TRADING CARDS (Buybacks / Sales / Hedging) ───────────────────────────────
 
-async function loadDeals() {
-  const deals  = await api(`/api/deals?entity=${currentEntity}&metal=${currentMetal}&limit=500`);
-  const tbody  = document.getElementById('deals-tbody');
+function renderTrading(deals) {
+  const buys  = deals.filter(d => d.deal_type === 'buy');
+  const sells = deals.filter(d => d.deal_type === 'sell');
+
+  function calcStats(subset) {
+    const count = subset.length;
+    const oz    = subset.reduce((s, d) => s + (d.oz || 0), 0);
+    const val   = subset.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
+    const vwap  = oz > 0 ? val / oz : 0;
+    const gp    = subset.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+    const margins = subset.map(d => d.margin_pct).filter(m => m != null);
+    const avgMargin = margins.length ? margins.reduce((a, b) => a + b, 0) / margins.length : 0;
+    return { count, oz, val, vwap, gp, avgMargin };
+  }
+
+  const b = calcStats(buys);
+  const s = calcStats(sells);
+
+  // Buybacks
+  set('buy-count',  b.count + ' deal' + (b.count !== 1 ? 's' : ''));
+  set('buy-vwap',   b.vwap > 0 ? formatZAR(b.vwap) : '–');
+  set('buy-margin', b.count > 0 ? fmt(b.avgMargin, 2) + '%' : '–');
+  set('buy-oz',     fmt(b.oz, 4) + ' oz');
+  set('buy-value',  formatZAR(b.val));
+  set('buy-gp',     formatZAR(b.gp));
+
+  // Sales
+  set('sell-count',  s.count + ' deal' + (s.count !== 1 ? 's' : ''));
+  set('sell-vwap',   s.vwap > 0 ? formatZAR(s.vwap) : '–');
+  set('sell-margin', s.count > 0 ? fmt(s.avgMargin, 2) + '%' : '–');
+  set('sell-oz',     fmt(s.oz, 4) + ' oz');
+  set('sell-value',  formatZAR(s.val));
+  set('sell-gp',     formatZAR(s.gp));
+
+  // Hedging — placeholders until hedging API is wired up
+  set('hedge-long-oz',  '– oz');
+  set('hedge-long-val', 'Not configured');
+  set('hedge-short-oz', '– oz');
+  set('hedge-short-val','Not configured');
+  set('hedge-net-oz',   '– oz');
+  set('hedge-net-val',  'Not configured');
+
+  // Silo / channel charts
+  renderSiloChart(calcSiloStats(deals));
+  renderChannelChart(calcChannelStats(deals));
+  renderVolumeChart(deals);
+  renderVwapChart(deals);
+  renderGpChart(deals);
+}
+
+// ─── DEALS TABLE ─────────────────────────────────────────────────────────────
+
+function renderDealsTable(deals) {
+  const tbody = document.getElementById('deals-tbody');
   tbody.innerHTML = '';
 
+  const label = document.getElementById('deals-count-label');
+  if (label) label.textContent = deals.length ? `(${deals.length})` : '';
+
   if (!deals.length) {
-    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:var(--muted)">No deals found — upload a dealer sheet to get started</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;padding:24px;color:var(--muted)">No deals found — upload a dealer sheet to get started</td></tr>';
     return;
   }
 
@@ -110,10 +151,10 @@ async function loadDeals() {
     tr.innerHTML = `
       <td>${d.id}</td>
       <td>${d.deal_date}</td>
-      <td class="${d.deal_type}">${d.deal_type.toUpperCase()}</td>
+      <td class="${d.deal_type}">${d.deal_type === 'buy' ? 'Buyback' : 'Sale'}</td>
       <td>${d.dealer_name || '–'}</td>
-      <td>${d.silo}</td>
-      <td>${d.channel}</td>
+      <td>${d.silo       || '–'}</td>
+      <td>${d.channel    || '–'}</td>
       <td>${d.product_name || d.product_code || '–'}</td>
       <td>${fmt(d.units)}</td>
       <td>${fmt(d.oz, 4)}</td>
@@ -121,27 +162,23 @@ async function loadDeals() {
       <td>${fmt(d.margin_pct, 2)}%</td>
       <td>${formatZAR(d.deal_value_zar)}</td>
       <td>${fmt(d.provision_pct, 1)}%</td>
-      <td class="${d.profit_margin_pct >= 0 ? 'sell' : 'buy'}">${fmt(d.profit_margin_pct, 2)}%</td>
+      <td class="${(d.profit_margin_pct || 0) >= 0 ? 'sell' : 'buy'}">${fmt(d.profit_margin_pct, 2)}%</td>
       <td>${formatZAR(d.gp_contribution_zar)}</td>
       <td>${fmt(d.inventory_after_oz, 4)}</td>
-      <td>${d.provision_flipped ? '⚠ YES' : '–'}</td>
+      <td>${d.provision_flipped ? 'YES' : '–'}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-// ─────────────────────────────────────────────
-// AGED INVENTORY TABLE
-// ─────────────────────────────────────────────
+// ─── AGED INVENTORY ───────────────────────────────────────────────────────────
 
-async function loadAgedInventory() {
-  const data  = await api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`);
+function renderAgedInventory(parcels) {
   const tbody = document.getElementById('aged-tbody');
   tbody.innerHTML = '';
 
-  const parcels = data.aged_parcels || [];
   if (!parcels.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No inventory parcels</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No inventory parcels</td></tr>';
     return;
   }
 
@@ -151,9 +188,9 @@ async function loadAgedInventory() {
     const tr      = document.createElement('tr');
     tr.innerHTML = `
       <td>${p.acquired_date}</td>
-      <td>${fmt(p.oz, 4)}</td>
+      <td>${fmt(p.oz, 4)} oz</td>
       <td>${formatZAR(p.cost_price_zar)}</td>
-      <td class="${flagged ? 'flagged' : 'active'}">${dom.days_held ?? '–'}</td>
+      <td class="${flagged ? 'flagged' : 'active'}">${dom.days_held ?? '–'} days</td>
       <td class="${flagged ? 'flagged' : 'active'}">${dom.status ?? '–'}</td>
       <td>${p.exit_suggestion || '–'}</td>
     `;
@@ -161,46 +198,43 @@ async function loadAgedInventory() {
   });
 }
 
-// ─────────────────────────────────────────────
-// SPOT PRICES
-// ─────────────────────────────────────────────
+// ─── SPOT PRICES ──────────────────────────────────────────────────────────────
 
 async function loadSpot() {
-  const spots = await api('/api/spot');
-  const gold  = spots['gold']   || 0;
+  const spots  = await api('/api/spot').catch(() => ({}));
+  const gold   = spots['gold']   || 0;
   const silver = spots['silver'] || 0;
-  document.getElementById('spot-gold').textContent   = `Au R${gold.toLocaleString('en-ZA', {maximumFractionDigits:0})}`;
-  document.getElementById('spot-silver').textContent = `Ag R${silver.toLocaleString('en-ZA', {maximumFractionDigits:0})}`;
 
-  // Pre-fill spot in preview panel
+  document.getElementById('spot-gold').textContent   = `Au ${formatZAR(gold)}`;
+  document.getElementById('spot-silver').textContent = `Ag ${formatZAR(silver)}`;
+
+  set('exp-spot', formatZAR(currentMetal === 'gold' ? gold : silver));
+
   const spotEl = document.getElementById('p-spot');
-  if (!spotEl.dataset.manuallySet) {
+  if (spotEl && !spotEl.dataset.manuallySet) {
     spotEl.value = currentMetal === 'gold' ? gold : silver;
   }
 }
 
 async function refreshSpot() {
   showToast('Refreshing spot prices…');
-  await api('/api/spot/refresh', { method: 'POST' });
+  await api('/api/spot/refresh', { method: 'POST' }).catch(() => {});
   await loadSpot();
   showToast('Spot prices updated');
 }
 
-// ─────────────────────────────────────────────
-// DEAL IMPACT PREVIEW
-// ─────────────────────────────────────────────
+// ─── DEAL IMPACT PREVIEW ──────────────────────────────────────────────────────
 
 async function runPreview() {
   const body = {
-    entity:        currentEntity,
-    metal:         currentMetal,
-    deal_type:     document.getElementById('p-type').value,
-    units:         parseFloat(document.getElementById('p-units').value) || 1,
-    equiv_oz:      parseFloat(document.getElementById('p-equiv-oz').value) || 1,
-    spot_price_zar: parseFloat(document.getElementById('p-spot').value) || null,
-    margin_pct:    parseFloat(document.getElementById('p-margin').value) || 0,
+    entity:         currentEntity,
+    metal:          currentMetal,
+    deal_type:      document.getElementById('p-type').value,
+    units:          parseFloat(document.getElementById('p-units').value)    || 1,
+    equiv_oz:       parseFloat(document.getElementById('p-equiv-oz').value) || 1,
+    spot_price_zar: parseFloat(document.getElementById('p-spot').value)     || null,
+    margin_pct:     parseFloat(document.getElementById('p-margin').value)   || 0,
   };
-
   try {
     const r = await api('/api/preview', { method: 'POST', json: body });
     renderPreview(r);
@@ -210,37 +244,31 @@ async function runPreview() {
 }
 
 function renderPreview(r) {
-  const el    = document.getElementById('preview-result');
-  const mvp   = r.margin_vs_provision;
-  const flip  = r.provision_flips;
-  const profitable = mvp.profitable;
+  const el  = document.getElementById('preview-result');
+  const mvp = r.margin_vs_provision || {};
+  const flip = r.provision_flips;
 
   el.className = 'preview-result' + (flip ? ' flip-alert' : '');
-
   el.innerHTML = `
-    <div class="preview-row"><span class="preview-key">Deal Value (ZAR)</span>
+    <div class="preview-row"><span class="preview-key">Deal Value</span>
       <span class="preview-val">${formatZAR(r.deal_value_zar)}</span></div>
     <div class="preview-row"><span class="preview-key">Effective Price</span>
       <span class="preview-val">${formatZAR(r.effective_price)}/oz</span></div>
     <div class="preview-row"><span class="preview-key">Profit vs Provision</span>
-      <span class="preview-val ${profitable ? 'profit' : 'loss'}">${fmt(mvp.profit_pct, 2)}% (${mvp.label})</span></div>
-    <div class="preview-row"><span class="preview-key">GP Contribution (ZAR)</span>
-      <span class="preview-val ${profitable ? 'profit' : 'loss'}">${formatZAR(r.gp_contribution_zar)}</span></div>
-    <div class="preview-row"><span class="preview-key">Cash Flow (ZAR)</span>
+      <span class="preview-val ${mvp.profitable ? 'profit' : 'loss'}">${fmt(mvp.profit_pct, 2)}%</span></div>
+    <div class="preview-row"><span class="preview-key">GP Contribution</span>
+      <span class="preview-val ${mvp.profitable ? 'profit' : 'loss'}">${formatZAR(r.gp_contribution_zar)}</span></div>
+    <div class="preview-row"><span class="preview-key">Cash Flow</span>
       <span class="preview-val">${formatZAR(r.cash_delta_zar)}</span></div>
-    <div class="preview-row"><span class="preview-key">Inventory After (oz)</span>
+    <div class="preview-row"><span class="preview-key">Inventory After</span>
       <span class="preview-val">${fmt(r.new_inventory_oz, 4)} oz</span></div>
-    <div class="preview-row"><span class="preview-key">New VWAP</span>
-      <span class="preview-val">${formatZAR(r.new_vwap)}</span></div>
-    <div class="preview-row"><span class="preview-key">Provision Before → After</span>
-      <span class="preview-val ${flip ? 'alert' : ''}">${r.provision_before.mode} → ${r.provision_after.mode}</span></div>
-    ${flip ? `<div class="flip-warning">⚠ This deal changes provision mode!</div>` : ''}
+    <div class="preview-row"><span class="preview-key">Provision</span>
+      <span class="preview-val ${flip ? 'alert' : ''}">${(r.provision_before||{}).mode} → ${(r.provision_after||{}).mode}</span></div>
+    ${flip ? '<div class="flip-warning">This deal changes provision mode</div>' : ''}
   `;
 }
 
-// ─────────────────────────────────────────────
-// FILE UPLOAD
-// ─────────────────────────────────────────────
+// ─── FILE UPLOAD ──────────────────────────────────────────────────────────────
 
 async function uploadFile(input) {
   const file = input.files[0];
@@ -251,75 +279,255 @@ async function uploadFile(input) {
   form.append('file', file);
 
   try {
-    const resp = await fetch('/api/upload', { method: 'POST', body: form });
+    const resp   = await fetch('/api/upload', { method: 'POST', body: form });
     const result = await resp.json();
-
     if (result.status === 'error') {
       showToast(`Import failed: ${result.errors?.join(', ') || result.error}`, true);
     } else {
-      showToast(`Imported ${result.deals_imported} deals (${result.status})`);
+      showToast(`Imported ${result.deals_imported} deals`);
       loadAll();
     }
   } catch (e) {
     showToast('Upload error: ' + e.message, true);
   }
-
   input.value = '';
 }
 
-// ─────────────────────────────────────────────
-// CHARTS
-// ─────────────────────────────────────────────
+// ─── CHARTS ───────────────────────────────────────────────────────────────────
 
-function renderSiloChart(siloData) {
+function calcSiloStats(deals) {
+  const out = {};
+  deals.forEach(d => {
+    const s = d.silo || 'unknown';
+    if (!out[s]) out[s] = { gp: 0 };
+    out[s].gp += d.gp_contribution_zar || 0;
+  });
+  const total = Object.values(out).reduce((s, v) => s + v.gp, 0);
+  Object.keys(out).forEach(k => {
+    out[k].gp_proportion_pct = total > 0 ? (out[k].gp / total) * 100 : 0;
+  });
+  return out;
+}
+
+function calcChannelStats(deals) {
+  const out = {};
+  deals.forEach(d => {
+    const c = d.channel || 'unknown';
+    if (!out[c]) out[c] = { gp: 0 };
+    out[c].gp += d.gp_contribution_zar || 0;
+  });
+  const total = Object.values(out).reduce((s, v) => s + v.gp, 0);
+  Object.keys(out).forEach(k => {
+    out[k].gp_proportion_pct = total > 0 ? (out[k].gp / total) * 100 : 0;
+  });
+  return out;
+}
+
+const BRAND_COLORS = ['#D4A755','#7B4FC9','#40B5AD','#A07ED6','#F5C469','#E05252'];
+
+// ─── HELPER: group deals by date ─────────────────────────────────────────────
+function groupByDate(deals) {
+  const map = {};
+  deals.forEach(d => {
+    const dt = d.deal_date || 'unknown';
+    if (!map[dt]) map[dt] = { buys: [], sells: [] };
+    if (d.deal_type === 'buy')  map[dt].buys.push(d);
+    if (d.deal_type === 'sell') map[dt].sells.push(d);
+  });
+  // Return sorted by date ascending
+  return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+}
+
+function lineChartDefaults() {
+  return {
+    borderWidth: 2,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    tension: 0.35,
+    fill: false,
+  };
+}
+
+function axisDefaults(title) {
+  return {
+    ticks:  { color: 'rgba(240,238,248,0.4)', font: { size: 10 }, maxRotation: 45 },
+    grid:   { color: 'rgba(107,57,175,0.12)' },
+    title:  title ? { display: true, text: title, color: 'rgba(240,238,248,0.35)', font: { size: 10 } } : undefined,
+  };
+}
+
+// ─── VOLUME BY DAY (bar chart) ────────────────────────────────────────────────
+function renderVolumeChart(deals) {
+  const ctx    = document.getElementById('volume-chart')?.getContext('2d');
+  if (!ctx) return;
+  const groups = groupByDate(deals);
+  const labels = groups.map(([dt]) => dt.slice(5)); // MM-DD
+  const buyOz  = groups.map(([, g]) => g.buys.reduce((s, d)  => s + (d.oz || 0), 0));
+  const sellOz = groups.map(([, g]) => g.sells.reduce((s, d) => s + (d.oz || 0), 0));
+
+  if (volumeChart) volumeChart.destroy();
+  volumeChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Buybacks (oz)', data: buyOz,  backgroundColor: 'rgba(64,181,173,0.75)',  borderRadius: 4 },
+        { label: 'Sales (oz)',    data: sellOz,  backgroundColor: 'rgba(212,167,85,0.75)', borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: 'rgba(240,238,248,0.55)', font: { size: 11 }, boxWidth: 10, padding: 10 } },
+      },
+      scales: {
+        x: axisDefaults(),
+        y: { ...axisDefaults('oz'), beginAtZero: true },
+      },
+    },
+  });
+}
+
+// ─── VWAP TREND (line chart) ──────────────────────────────────────────────────
+function renderVwapChart(deals) {
+  const ctx    = document.getElementById('vwap-chart')?.getContext('2d');
+  if (!ctx) return;
+  const groups = groupByDate(deals);
+  const labels = groups.map(([dt]) => dt.slice(5));
+
+  function dayVwap(subset) {
+    const oz  = subset.reduce((s, d) => s + (d.oz || 0), 0);
+    const val = subset.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
+    return oz > 0 ? val / oz : null;
+  }
+
+  const buyVwap  = groups.map(([, g]) => dayVwap(g.buys));
+  const sellVwap = groups.map(([, g]) => dayVwap(g.sells));
+
+  if (vwapChart) vwapChart.destroy();
+  vwapChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Buy VWAP',  data: buyVwap,  borderColor: '#40B5AD', pointBackgroundColor: '#40B5AD', ...lineChartDefaults() },
+        { label: 'Sell VWAP', data: sellVwap, borderColor: '#D4A755', pointBackgroundColor: '#D4A755', ...lineChartDefaults() },
+      ],
+    },
+    options: {
+      responsive: true,
+      spanGaps: true,
+      plugins: {
+        legend: { labels: { color: 'rgba(240,238,248,0.55)', font: { size: 11 }, boxWidth: 10, padding: 10 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': R ' + (ctx.parsed.y || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 }),
+          }
+        }
+      },
+      scales: {
+        x: axisDefaults(),
+        y: { ...axisDefaults('ZAR/oz') },
+      },
+    },
+  });
+}
+
+// ─── DAILY GP (bar chart) ─────────────────────────────────────────────────────
+function renderGpChart(deals) {
+  const ctx    = document.getElementById('gp-chart')?.getContext('2d');
+  if (!ctx) return;
+  const groups = groupByDate(deals);
+  const labels = groups.map(([dt]) => dt.slice(5));
+  const gpData = groups.map(([, g]) => {
+    const all = [...g.buys, ...g.sells];
+    return all.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+  });
+
+  if (gpChart) gpChart.destroy();
+  gpChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'GP (ZAR)',
+        data: gpData,
+        backgroundColor: gpData.map(v => v >= 0 ? 'rgba(123,79,201,0.75)' : 'rgba(224,82,82,0.7)'),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => 'GP: R ' + (ctx.parsed.y || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 }),
+          }
+        }
+      },
+      scales: {
+        x: axisDefaults(),
+        y: { ...axisDefaults('ZAR') },
+      },
+    },
+  });
+}
+
+function chartOptions(legendColor) {
+  return {
+    plugins: {
+      legend: {
+        labels: {
+          color: legendColor || 'rgba(240,238,248,0.6)',
+          font: { family: '-apple-system, Helvetica Neue, Arial', size: 11 },
+          boxWidth: 10,
+          padding: 12,
+        }
+      }
+    },
+    cutout: '68%',
+  };
+}
+
+function renderSiloChart(data) {
   const ctx    = document.getElementById('silo-chart').getContext('2d');
-  const labels = Object.keys(siloData);
-  const values = labels.map(k => siloData[k].gp_proportion_pct || 0);
+  const labels = Object.keys(data);
+  const values = labels.map(k => data[k].gp_proportion_pct || 0);
 
   if (siloChart) siloChart.destroy();
   siloChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels,
-      datasets: [{ data: values, backgroundColor: ['#D4A755','#339E95','#432C59'], borderWidth: 0 }]
+      datasets: [{ data: values, backgroundColor: BRAND_COLORS, borderWidth: 0, hoverOffset: 6 }]
     },
-    options: {
-      plugins: { legend: { labels: { color: '#F5F5F5', font: { family: 'Arial', size: 11 } } } },
-      cutout: '65%',
-    }
+    options: chartOptions(),
   });
 }
 
-function renderChannelChart(channelData) {
+function renderChannelChart(data) {
   const ctx    = document.getElementById('channel-chart').getContext('2d');
-  const labels = Object.keys(channelData);
-  const values = labels.map(k => channelData[k].gp_proportion_pct || 0);
+  const labels = Object.keys(data);
+  const values = labels.map(k => data[k].gp_proportion_pct || 0);
 
   if (channelChart) channelChart.destroy();
   channelChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels,
-      datasets: [{ data: values, backgroundColor: ['#4B1D75','#D4A755'], borderWidth: 0 }]
+      datasets: [{ data: values, backgroundColor: BRAND_COLORS.slice(1), borderWidth: 0, hoverOffset: 6 }]
     },
-    options: {
-      plugins: { legend: { labels: { color: '#F5F5F5', font: { family: 'Arial', size: 11 } } } },
-      cutout: '65%',
-    }
+    options: chartOptions(),
   });
 }
 
-// ─────────────────────────────────────────────
-// UTILITIES
-// ─────────────────────────────────────────────
+// ─── UTILITIES ────────────────────────────────────────────────────────────────
 
 async function api(path, opts = {}) {
-  const options = {
-    method: opts.method || 'GET',
-    headers: {},
-  };
+  const options = { method: opts.method || 'GET', headers: {} };
   if (opts.json) {
-    options.body = JSON.stringify(opts.json);
+    options.body    = JSON.stringify(opts.json);
     options.headers['Content-Type'] = 'application/json';
   }
   const resp = await fetch(path, options);
@@ -334,12 +542,18 @@ function set(id, value) {
 
 function fmt(val, decimals = 2) {
   if (val == null || val === '') return '–';
-  return Number(val).toLocaleString('en-ZA', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return Number(val).toLocaleString('en-ZA', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
 function formatZAR(val) {
-  if (val == null || val === '') return '–';
-  return 'R' + Number(val).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (val == null || val === '' || isNaN(val)) return '–';
+  return 'R\u00A0' + Number(val).toLocaleString('en-ZA', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function showToast(msg, isError = false) {
@@ -350,7 +564,7 @@ function showToast(msg, isError = false) {
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
-  toast.style.background = isError ? '#C62828' : '#432C59';
+  toast.className = 'toast' + (isError ? ' error' : '');
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
+  setTimeout(() => toast.classList.remove('show'), 3500);
 }

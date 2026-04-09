@@ -10,67 +10,201 @@
 </head>
 <body>
 
+<!-- ── HEADER ── -->
 <header>
   <div class="logo">Treasury Brain<span>SA Bullion</span></div>
   <div class="header-meta">
     <span id="live-clock"></span>
-    <span id="spot-gold" class="spot-badge gold">Au –</span>
+    <span id="spot-gold"   class="spot-badge gold">Au –</span>
     <span id="spot-silver" class="spot-badge silver">Ag –</span>
-    <button class="btn-refresh" onclick="refreshSpot()">↻ Refresh Spot</button>
+    <button class="btn-refresh" onclick="refreshSpot()">↻ Spot</button>
   </div>
 </header>
 
-<!-- Entity tabs -->
+<!-- ── ENTITY TABS ── -->
 <nav class="entity-tabs">
   <button class="tab active" onclick="switchEntity('SABIS', this)">SABIS</button>
-  <button class="tab" onclick="switchEntity('SABI', this)">SABI</button>
-  <button class="tab" onclick="switchEntity('SABGB', this)">SABGB</button>
+  <button class="tab"        onclick="switchEntity('SABI',  this)">SABI</button>
+  <button class="tab"        onclick="switchEntity('SABGB', this)">SABGB</button>
 </nav>
-
-<!-- Metal sub-tabs -->
 <nav class="metal-tabs">
-  <button class="tab active" onclick="switchMetal('gold', this)">Gold</button>
-  <button class="tab" onclick="switchMetal('silver', this)">Silver</button>
+  <button class="tab active" onclick="switchMetal('gold',   this)">Gold</button>
+  <button class="tab"        onclick="switchMetal('silver', this)">Silver</button>
 </nav>
 
 <main>
 
-  <!-- ── KPI ROW ── -->
-  <section class="kpi-row">
-    <div class="kpi-card" id="kpi-gp">
-      <div class="kpi-label">Today's GP</div>
-      <div class="kpi-value" id="kpi-gp-val">–</div>
+  <!-- ═══════════════════════════════════════════
+       EXPOSURE BANNER  (top-line position)
+  ═══════════════════════════════════════════ -->
+  <section class="exposure-banner">
+
+    <div class="exp-card" id="exp-card-provision">
+      <div class="exp-label">Provision Mode</div>
+      <div class="exp-value" id="exp-provision">–</div>
+      <div class="exp-sub"   id="exp-prov-sub">–</div>
     </div>
-    <div class="kpi-card" id="kpi-provision">
-      <div class="kpi-label">Provision Mode</div>
-      <div class="kpi-value" id="kpi-provision-val">–</div>
+
+    <div class="exp-card">
+      <div class="exp-label">Net Exposure</div>
+      <div class="exp-value" id="exp-oz">–</div>
+      <div class="exp-sub"   id="exp-value-zar">–</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Inventory (oz)</div>
-      <div class="kpi-value" id="kpi-inventory-val">–</div>
+
+    <div class="exp-card highlight">
+      <div class="exp-label">Total GP</div>
+      <div class="exp-value gold" id="exp-gp">–</div>
+      <div class="exp-sub"        id="exp-gp-sub">–</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Inventory Value (ZAR)</div>
-      <div class="kpi-value" id="kpi-inv-value-val">–</div>
+
+    <div class="exp-card">
+      <div class="exp-label">Live Spot</div>
+      <div class="exp-value" id="exp-spot">–</div>
+      <div class="exp-sub">ZAR / oz</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Buy VWAP</div>
-      <div class="kpi-value" id="kpi-buy-vwap">–</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Sell VWAP</div>
-      <div class="kpi-value" id="kpi-sell-vwap">–</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Deals Today</div>
-      <div class="kpi-value" id="kpi-deal-count">–</div>
-    </div>
+
   </section>
 
-  <!-- ── MAIN GRID ── -->
-  <div class="main-grid">
+  <!-- ═══════════════════════════════════════════
+       BUYBACKS | SALES | HEDGING
+  ═══════════════════════════════════════════ -->
+  <div class="trading-grid">
 
-    <!-- LEFT: What-if Preview -->
+    <!-- BUYBACKS -->
+    <section class="card trading-card">
+      <div class="tc-header buy-header">
+        <span class="tc-title">Buybacks</span>
+        <span class="tc-badge" id="buy-count">0 deals</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">VWAP</div>
+          <div class="tc-vwap-val" id="buy-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Avg Margin</div>
+          <div class="tc-vwap-val" id="buy-margin">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val"  id="buy-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Value</span>
+          <span class="tc-stat-val"  id="buy-value">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">GP Contribution</span>
+          <span class="tc-stat-val"  id="buy-gp">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SALES -->
+    <section class="card trading-card">
+      <div class="tc-header sell-header">
+        <span class="tc-title">Sales</span>
+        <span class="tc-badge" id="sell-count">0 deals</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">VWAP</div>
+          <div class="tc-vwap-val" id="sell-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Avg Margin</div>
+          <div class="tc-vwap-val" id="sell-margin">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val"  id="sell-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Value</span>
+          <span class="tc-stat-val"  id="sell-value">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">GP Contribution</span>
+          <span class="tc-stat-val"  id="sell-gp">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- HEDGING -->
+    <section class="card trading-card">
+      <div class="tc-header hedge-header">
+        <span class="tc-title">Hedging</span>
+      </div>
+      <div class="hedge-rows">
+        <div class="hedge-item">
+          <div class="hedge-side long-label">Longs</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz  long-val" id="hedge-long-oz">–</div>
+            <div class="hedge-val"           id="hedge-long-val">–</div>
+          </div>
+        </div>
+        <div class="hedge-item">
+          <div class="hedge-side short-label">Shorts</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz  short-val" id="hedge-short-oz">–</div>
+            <div class="hedge-val"            id="hedge-short-val">–</div>
+          </div>
+        </div>
+        <div class="hedge-divider"></div>
+        <div class="hedge-item">
+          <div class="hedge-side net-label">Net Position</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz" id="hedge-net-oz">–</div>
+            <div class="hedge-val" id="hedge-net-val">–</div>
+          </div>
+        </div>
+      </div>
+      <div class="hedge-note">Hedging positions tracked separately</div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       CHARTS ROW  (Volume by day + VWAP trend)
+  ═══════════════════════════════════════════ -->
+  <div class="charts-row">
+
+    <section class="card">
+      <h2>Deal Volume by Day (oz)</h2>
+      <canvas id="volume-chart" height="160"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>VWAP Trend — Buy vs Sell</h2>
+      <canvas id="vwap-chart" height="160"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>Daily GP Contribution (ZAR)</h2>
+      <canvas id="gp-chart" height="160"></canvas>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECONDARY ROW: Charts + What-If
+  ═══════════════════════════════════════════ -->
+  <div class="secondary-grid">
+
+    <section class="card">
+      <h2>GP by Silo</h2>
+      <canvas id="silo-chart" height="190"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>GP by Channel</h2>
+      <canvas id="channel-chart" height="190"></canvas>
+    </section>
+
     <section class="card preview-panel">
       <h2>Deal Impact Preview</h2>
       <div class="form-row">
@@ -94,28 +228,19 @@
         <label>Margin %
           <input type="number" id="p-margin" value="5.0" step="0.01" />
         </label>
-        <button class="btn-primary" onclick="runPreview()">Preview Impact</button>
+        <button class="btn-primary" onclick="runPreview()">Preview</button>
       </div>
       <div id="preview-result" class="preview-result hidden"></div>
     </section>
 
-    <!-- RIGHT: Silo & Channel Charts -->
-    <section class="card">
-      <h2>Silo Breakdown — GP %</h2>
-      <canvas id="silo-chart" height="200"></canvas>
-    </section>
-
-    <section class="card">
-      <h2>Channel Breakdown — GP %</h2>
-      <canvas id="channel-chart" height="200"></canvas>
-    </section>
-
   </div>
 
-  <!-- ── DEALS TABLE ── -->
+  <!-- ═══════════════════════════════════════════
+       ALL DEALS TABLE
+  ═══════════════════════════════════════════ -->
   <section class="card full-width">
     <div class="card-header">
-      <h2>Today's Deals</h2>
+      <h2>All Deals <span id="deals-count-label" class="count-label"></span></h2>
       <label class="upload-label">
         Upload Dealer Sheet
         <input type="file" accept=".xlsx,.xls,.xlsm" onchange="uploadFile(this)" />
@@ -138,7 +263,9 @@
     </div>
   </section>
 
-  <!-- ── AGED INVENTORY ── -->
+  <!-- ═══════════════════════════════════════════
+       AGED INVENTORY
+  ═══════════════════════════════════════════ -->
   <section class="card full-width">
     <h2>Aged Inventory</h2>
     <div class="table-wrap">
