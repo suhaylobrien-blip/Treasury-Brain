@@ -121,14 +121,18 @@ async function loadAll() {
 // ─── EXPOSURE BANNER ─────────────────────────────────────────────────────────
 
 function renderExposure(deals, inv) {
-  const oz   = inv.total_oz  || 0;
   const spot = inv.spot_zar  || 0;
   const prov = inv.provision || {};
 
+  // Net exposure from the filtered period: positive = net long, negative = net short
+  const buyOz  = deals.filter(d => d.deal_type === 'buy').reduce((s, d)  => s + (d.oz || 0), 0);
+  const sellOz = deals.filter(d => d.deal_type === 'sell').reduce((s, d) => s + (d.oz || 0), 0);
+  const netOz  = buyOz - sellOz;
+
   const totalGP = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
 
-  set('exp-oz',        fmt(Math.abs(oz), 4) + ' oz' + (oz < 0 ? ' (short)' : ''));
-  set('exp-value-zar', formatZAR(Math.abs(oz * spot)));
+  set('exp-oz',        fmt(netOz, 2) + ' oz');
+  set('exp-value-zar', formatZAR(Math.abs(netOz) * spot));
   set('exp-gp',        formatZAR(totalGP));
   set('exp-gp-sub',    `${deals.length} deal${deals.length !== 1 ? 's' : ''} total`);
   set('exp-spot',      formatZAR(spot));
@@ -166,7 +170,7 @@ function renderTrading(deals) {
   set('buy-count',  b.count + ' deal' + (b.count !== 1 ? 's' : ''));
   set('buy-vwap',   b.vwap > 0 ? formatZAR(b.vwap) : '–');
   set('buy-margin', b.count > 0 ? fmt(b.avgMargin, 2) + '%' : '–');
-  set('buy-oz',     fmt(b.oz, 4) + ' oz');
+  set('buy-oz',     fmt(b.oz, 2) + ' oz');
   set('buy-value',  formatZAR(b.val));
   set('buy-gp',     formatZAR(b.gp));
 
@@ -174,7 +178,7 @@ function renderTrading(deals) {
   set('sell-count',  s.count + ' deal' + (s.count !== 1 ? 's' : ''));
   set('sell-vwap',   s.vwap > 0 ? formatZAR(s.vwap) : '–');
   set('sell-margin', s.count > 0 ? fmt(s.avgMargin, 2) + '%' : '–');
-  set('sell-oz',     fmt(s.oz, 4) + ' oz');
+  set('sell-oz',     fmt(s.oz, 2) + ' oz');
   set('sell-value',  formatZAR(s.val));
   set('sell-gp',     formatZAR(s.gp));
 
@@ -242,8 +246,8 @@ function renderDealerTable(deals) {
       <td>${all.length}</td>
       <td class="buy">${buys.length}</td>
       <td class="sell">${sells.length}</td>
-      <td>${fmt(buyOz, 4)} oz</td>
-      <td>${fmt(sellOz, 4)} oz</td>
+      <td>${fmt(buyOz, 2)} oz</td>
+      <td>${fmt(sellOz, 2)} oz</td>
       <td>${buyVwap  > 0 ? formatZAR(buyVwap)  : '–'}</td>
       <td>${sellVwap > 0 ? formatZAR(sellVwap) : '–'}</td>
       <td style="color:${gp >= 0 ? 'var(--gold)' : 'var(--red)'};font-weight:600">${formatZAR(gp)}</td>
@@ -345,7 +349,7 @@ function renderAgedInventory(parcels) {
     const tr      = document.createElement('tr');
     tr.innerHTML = `
       <td>${p.acquired_date}</td>
-      <td>${fmt(p.oz, 4)} oz</td>
+      <td>${fmt(p.oz, 2)} oz</td>
       <td>${formatZAR(p.cost_price_zar)}</td>
       <td class="${flagged ? 'flagged' : 'active'}">${dom.days_held ?? '–'} days</td>
       <td class="${flagged ? 'flagged' : 'active'}">${dom.status ?? '–'}</td>
