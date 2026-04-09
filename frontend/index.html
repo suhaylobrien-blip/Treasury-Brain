@@ -68,14 +68,20 @@
 
     <div class="exp-card">
       <div class="exp-label">Net Exposure</div>
-      <div class="exp-value" id="exp-oz">–</div>
-      <div class="exp-sub"   id="exp-value-zar">–</div>
+      <div class="exp-value" id="exp-value-zar">–</div>
+      <div class="exp-sub"   id="exp-oz">–</div>
     </div>
 
     <div class="exp-card highlight">
       <div class="exp-label">Total GP</div>
       <div class="exp-value gold" id="exp-gp">–</div>
       <div class="exp-sub"        id="exp-gp-sub">–</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-label">Combined GP (Au + Ag)</div>
+      <div class="exp-value gold" id="exp-combined-gp">–</div>
+      <div class="exp-sub"        id="exp-combined-gp-sub">–</div>
     </div>
 
     <div class="exp-card">
@@ -232,6 +238,39 @@
   </div>
 
   <!-- ═══════════════════════════════════════════
+       TOP DEAL OF THE DAY
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width top-deal-card" id="top-deal-section" style="display:none">
+    <h2>Top Deal of the Period</h2>
+    <div class="top-deal-grid">
+      <div class="top-deal-item">
+        <div class="top-deal-label">Dealer / Source</div>
+        <div class="top-deal-val" id="top-deal-dealer">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Product</div>
+        <div class="top-deal-val" id="top-deal-product">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Type</div>
+        <div class="top-deal-val" id="top-deal-type">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Volume</div>
+        <div class="top-deal-val" id="top-deal-oz">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">GP Contribution</div>
+        <div class="top-deal-val gold" id="top-deal-gp">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Share of Total GP</div>
+        <div class="top-deal-val" id="top-deal-share">–</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
        DEALER BREAKDOWN
   ═══════════════════════════════════════════ -->
   <section class="card full-width">
@@ -264,17 +303,17 @@
 
     <section class="card">
       <h2>Deal Volume by Day (oz)</h2>
-      <canvas id="volume-chart" height="80"></canvas>
+      <canvas id="volume-chart" height="100"></canvas>
     </section>
 
     <section class="card">
       <h2>VWAP Trend — Buy vs Sell</h2>
-      <canvas id="vwap-chart" height="80"></canvas>
+      <canvas id="vwap-chart" height="100"></canvas>
     </section>
 
     <section class="card">
       <h2>Daily GP Contribution (ZAR)</h2>
-      <canvas id="gp-chart" height="80"></canvas>
+      <canvas id="gp-chart" height="100"></canvas>
     </section>
 
   </div>
@@ -286,12 +325,12 @@
 
     <section class="card">
       <h2>GP by Silo</h2>
-      <canvas id="silo-chart" height="100"></canvas>
+      <canvas id="silo-chart" height="120"></canvas>
     </section>
 
     <section class="card">
       <h2>GP by Channel</h2>
-      <canvas id="channel-chart" height="100"></canvas>
+      <canvas id="channel-chart" height="120"></canvas>
     </section>
 
     <section class="card preview-panel">

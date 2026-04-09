@@ -146,7 +146,7 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 /* ── EXPOSURE BANNER ────────────────────────────────────────────────────── */
 .exposure-banner {
   display: grid;
-  grid-template-columns: repeat(4, 1fr) 220px;
+  grid-template-columns: repeat(5, 1fr) 220px;
   gap: 12px;
 }
 
@@ -503,7 +503,7 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 }
 .charts-row canvas,
 .secondary-grid canvas {
-  max-height: 100px;
+  max-height: 120px;
   display: block;
 }
 
@@ -879,6 +879,30 @@ tr.pipeline-row:hover { background: rgba(212,167,85,0.12); }
   background: var(--border);
   margin: 2px 0;
 }
+
+/* ── TOP DEAL TRACKER ───────────────────────────────────────────────────── */
+.top-deal-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+}
+.top-deal-item {}
+.top-deal-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+}
+.top-deal-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top-deal-val.gold { color: var(--gold); }
 
 /* ── SCROLLBAR ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }

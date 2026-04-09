@@ -210,7 +210,8 @@ def preview():
     deal_type = data.get('deal_type', 'sell')
     units     = float(data.get('units', 1))
     equiv_oz  = float(data.get('equiv_oz', 1.0))
-    spot      = float(data.get('spot_price_zar', get_latest_spot(metal)))
+    spot_raw  = data.get('spot_price_zar')
+    spot      = float(spot_raw) if spot_raw is not None else float(get_latest_spot(metal) or 0)
     margin    = float(data.get('margin_pct', 0))
 
     oz           = units * equiv_oz

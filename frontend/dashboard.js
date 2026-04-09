@@ -117,14 +117,20 @@ function buildPipelineUrl() {
 // ─── LOAD ALL ────────────────────────────────────────────────────────────────
 
 async function loadAll() {
-  const [deals, inv, hedging, pipeline] = await Promise.all([
+  const otherMetal = currentMetal === 'gold' ? 'silver' : 'gold';
+  const otherDealsUrl = `/api/deals?entity=${currentEntity}&metal=${otherMetal}&limit=1000` +
+    (filterFrom ? `&from=${filterFrom}` + (filterTo ? `&to=${filterTo}` : '') : '');
+
+  const [deals, inv, hedging, pipeline, otherDeals] = await Promise.all([
     api(buildDealsUrl()).catch(() => []),
     api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({})),
     api(`/api/hedging?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({ positions: [], long_oz: 0, short_oz: 0, net_oz: 0 })),
     api(buildPipelineUrl()).catch(() => []),
+    api(otherDealsUrl).catch(() => []),
   ]);
 
   renderExposure(deals, inv, hedging);
+  renderCombinedGP(deals, otherDeals);
   renderTrading(deals);
   renderHedging(hedging, inv);
   renderPipelineTable(pipeline, inv, hedging);
@@ -149,8 +155,10 @@ function renderExposure(deals, inv, hedging) {
 
   const totalGP = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
 
-  set('exp-oz',        fmt(ecosystemOz, 2) + ' oz');
-  set('exp-value-zar', formatZAR(Math.abs(ecosystemOz) * spot));
+  // ZAR value is the prominent figure; oz breakdown in sub-label
+  const zarValue = Math.abs(ecosystemOz) * spot;
+  set('exp-value-zar', formatZAR(zarValue));
+  set('exp-oz',        `${fmt(ecosystemOz, 2)} oz net  |  ${fmt(bullionOz, 2)} oz physical`);
   set('exp-gp',        formatZAR(totalGP));
   set('exp-gp-sub',    `${deals.length} deal${deals.length !== 1 ? 's' : ''} total`);
   set('exp-spot',      formatZAR(spot));
@@ -162,6 +170,47 @@ function renderExposure(deals, inv, hedging) {
     provCard.classList.toggle('active',   provActive);
     provCard.classList.toggle('inactive', !provActive);
   }
+}
+
+// ─── COMBINED GP (Au + Ag) ────────────────────────────────────────────────────
+
+function renderCombinedGP(currentDeals, otherDeals) {
+  const goldDeals   = currentMetal === 'gold'   ? currentDeals : otherDeals;
+  const silverDeals = currentMetal === 'silver' ? currentDeals : otherDeals;
+
+  const goldGP   = goldDeals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+  const silverGP = silverDeals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+  const totalGP  = goldGP + silverGP;
+
+  set('exp-combined-gp',     formatZAR(totalGP));
+  set('exp-combined-gp-sub', `Au ${formatZAR(goldGP)}  |  Ag ${formatZAR(silverGP)}`);
+}
+
+// ─── TOP DEAL TRACKER ────────────────────────────────────────────────────────
+
+function renderTopDeal(deals) {
+  const section = document.getElementById('top-deal-section');
+  if (!section) return;
+
+  if (!deals.length) { section.style.display = 'none'; return; }
+
+  // Deal with highest GP contribution in the current filter period
+  const top = deals.reduce((best, d) =>
+    (d.gp_contribution_zar || 0) > (best.gp_contribution_zar || 0) ? d : best
+  , deals[0]);
+
+  const totalGP  = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+  const gpShare  = totalGP > 0 ? (top.gp_contribution_zar / totalGP) * 100 : 0;
+  const dealer   = top.dealer_name || top.channel || '–';
+  const dealType = top.deal_type === 'buy' ? 'Buyback' : 'Sale';
+
+  section.style.display = '';
+  set('top-deal-dealer',  dealer);
+  set('top-deal-product', top.product_name || top.product_code || '–');
+  set('top-deal-type',    dealType);
+  set('top-deal-oz',      fmt(top.oz || 0, 2) + ' oz');
+  set('top-deal-gp',      formatZAR(top.gp_contribution_zar || 0));
+  set('top-deal-share',   fmt(gpShare, 1) + '% of total GP');
 }
 
 // ─── TRADING CARDS (Buybacks / Sales / Hedging) ───────────────────────────────
@@ -209,6 +258,7 @@ function renderTrading(deals) {
   renderVwapChart(deals);
   renderGpChart(deals);
   renderDealerTable(deals);
+  renderTopDeal(deals);
 }
 
 // ─── HEDGING / POSITIONS ─────────────────────────────────────────────────────
@@ -481,14 +531,14 @@ function renderDealsTable(deals) {
         <td>${d.channel  || '–'}</td>
         <td>${d.product_name || d.product_code || '–'}${isProof ? ' <span class="proof-badge">Proof</span>' : ''}</td>
         <td>${fmt(d.units)}</td>
-        <td>${fmt(d.oz, 4)}</td>
+        <td>${fmt(d.oz, 2)}</td>
         <td>${formatZAR(d.spot_price_zar)}</td>
         <td>${fmt(d.margin_pct, 2)}%</td>
         <td>${formatZAR(d.deal_value_zar)}</td>
         <td>${fmt(d.provision_pct, 1)}%</td>
         <td class="${(d.profit_margin_pct || 0) >= 0 ? 'sell' : 'buy'}">${fmt(d.profit_margin_pct, 2)}%</td>
         <td>${formatZAR(d.gp_contribution_zar)}</td>
-        <td>${fmt(d.inventory_after_oz, 4)}</td>
+        <td>${fmt(d.inventory_after_oz, 2)}</td>
         <td>${d.provision_flipped ? 'YES' : '–'}</td>
       `;
       tbody.appendChild(tr);
@@ -577,27 +627,33 @@ async function runPreview() {
 }
 
 function renderPreview(r) {
-  const el  = document.getElementById('preview-result');
-  const mvp = r.margin_vs_provision || {};
+  const el   = document.getElementById('preview-result');
+  const mvp  = r.margin_vs_provision || {};
   const flip = r.provision_flips;
+  const cashSign = r.cash_delta_zar >= 0 ? '+' : '';
+  const expSign  = r.exposure_delta_zar >= 0 ? '+' : '';
 
   el.className = 'preview-result' + (flip ? ' flip-alert' : '');
   el.innerHTML = `
     <div class="preview-row"><span class="preview-key">Deal Value</span>
       <span class="preview-val">${formatZAR(r.deal_value_zar)}</span></div>
     <div class="preview-row"><span class="preview-key">Effective Price</span>
-      <span class="preview-val">${formatZAR(r.effective_price)}/oz</span></div>
-    <div class="preview-row"><span class="preview-key">Profit vs Provision</span>
-      <span class="preview-val ${mvp.profitable ? 'profit' : 'loss'}">${fmt(mvp.profit_pct, 2)}%</span></div>
+      <span class="preview-val">${formatZAR(r.effective_price)} / oz</span></div>
+    <div class="preview-row"><span class="preview-key">Margin vs Provision</span>
+      <span class="preview-val ${mvp.profitable ? 'profit' : 'loss'}">${mvp.profitable ? '+' : ''}${fmt(mvp.profit_pct, 2)}%</span></div>
     <div class="preview-row"><span class="preview-key">GP Contribution</span>
       <span class="preview-val ${mvp.profitable ? 'profit' : 'loss'}">${formatZAR(r.gp_contribution_zar)}</span></div>
     <div class="preview-row"><span class="preview-key">Cash Flow</span>
-      <span class="preview-val">${formatZAR(r.cash_delta_zar)}</span></div>
+      <span class="preview-val">${cashSign}${formatZAR(r.cash_delta_zar)}</span></div>
+    <div class="preview-row"><span class="preview-key">Exposure Delta</span>
+      <span class="preview-val">${expSign}${formatZAR(r.exposure_delta_zar)}</span></div>
+    <div class="preview-row"><span class="preview-key">New VWAP</span>
+      <span class="preview-val">${r.new_vwap > 0 ? formatZAR(r.new_vwap) : '–'}</span></div>
     <div class="preview-row"><span class="preview-key">Inventory After</span>
-      <span class="preview-val">${fmt(r.new_inventory_oz, 4)} oz</span></div>
-    <div class="preview-row"><span class="preview-key">Provision</span>
+      <span class="preview-val">${fmt(r.new_inventory_oz, 2)} oz</span></div>
+    <div class="preview-row"><span class="preview-key">Provision Mode</span>
       <span class="preview-val ${flip ? 'alert' : ''}">${(r.provision_before||{}).mode} → ${(r.provision_after||{}).mode}</span></div>
-    ${flip ? '<div class="flip-warning">This deal changes provision mode</div>' : ''}
+    ${flip ? '<div class="flip-warning">&#9888; This deal changes provision mode!</div>' : ''}
   `;
 }
 
