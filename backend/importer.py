@@ -299,12 +299,14 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
     deals = []
     has_colours = bool(row_statuses) and any(s for s in row_statuses.values())
 
-    side_deal_type = {'': 'buy', '.1': 'sell'}
+    # Detect whether the sheet uses split left/right columns (buys | sells)
+    # or a single-column format where Inventory Movement determines deal type.
+    has_split = any(c.endswith('.1') for c in df.columns)
+    sides     = [('', 'buy'), ('.1', 'sell')] if has_split else [('', None)]
 
-    for suffix in ['', '.1']:
+    for suffix, forced_type in sides:
         half = _extract_half(df, suffix)
         half = _map_sabis_cols(half)
-        deal_type = side_deal_type[suffix]
 
         if 'spot_price_zar' not in half.columns:
             continue
@@ -364,10 +366,15 @@ def _parse_deal_tab(df: pd.DataFrame, metal: str, entity: str,
             movement = str(row.get('movement', '') or '')
             source   = str(row.get('channel_raw', '') or '')
 
+            # Single-column sheets: use Inventory Movement to determine deal type
+            deal_type = forced_type if forced_type is not None else _deal_type_from_movement(movement)
+
             product_type = 'proof' if status == 'proof' else 'bullion'
             db_status    = 'confirmed' if status in ('confirmed', 'proof') else 'quote'
 
             oz_val = equiv * units
+            if oz_val <= 0:
+                continue
 
             deals.append({
                 'entity':         entity,
@@ -510,6 +517,7 @@ def _process_sabis_file(filepath: str, filename: str,
                 result = _process_row(deal, filename)
                 if result:
                     processed_deals.append(result)
+                # None return = duplicate, silently skipped
             except Exception as e:
                 all_errors.append(f"Tab '{tab}': row error — {e}")
 
@@ -544,6 +552,7 @@ def _process_sabis_file(filepath: str, filename: str,
         'metal_breakdown':   metal_breakdown,
         'warnings':          all_errors,
         'deals':             processed_deals,
+        'note':              'Duplicate deals were automatically skipped.' if not processed_deals and not all_errors else None,
     }
 
 
@@ -734,6 +743,10 @@ def _process_row(row: dict, source_file: str) -> dict:
     }
 
     deal_id = insert_deal(deal_record)
+    if deal_id < 0:
+        # Negative id = duplicate detected — skip inventory + cash flow update
+        return None
+
     update_inventory(entity, metal, inv_delta)
     insert_cash_flow({
         'entity':      entity,

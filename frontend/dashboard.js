@@ -693,7 +693,8 @@ function calcChannelStats(deals) {
 
 const BRAND_COLORS = ['#D4A755','#7B4FC9','#40B5AD','#A07ED6','#F5C469','#E05252'];
 
-// ─── HELPER: group deals by date ─────────────────────────────────────────────
+// ─── SHARED CHART HELPERS ─────────────────────────────────────────────────────
+
 function groupByDate(deals) {
   const map = {};
   deals.forEach(d => {
@@ -702,36 +703,104 @@ function groupByDate(deals) {
     if (d.deal_type === 'buy')  map[dt].buys.push(d);
     if (d.deal_type === 'sell') map[dt].sells.push(d);
   });
-  // Return sorted by date ascending
   return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 }
 
-function lineChartDefaults() {
+function zarK(v) {
+  // Compact ZAR for chart axes: 1 234 567 → "R 1.2M" or "R 234K"
+  if (Math.abs(v) >= 1_000_000) return 'R ' + (v / 1_000_000).toFixed(1) + 'M';
+  if (Math.abs(v) >= 1_000)     return 'R ' + (v / 1_000).toFixed(0) + 'K';
+  return 'R ' + v.toFixed(0);
+}
+
+const CHART_DEFAULTS = {
+  animation: { duration: 400 },
+  responsive: true,
+  maintainAspectRatio: false,
+};
+
+const LEGEND_STYLE = {
+  color: 'rgba(240,238,248,0.6)',
+  font: { family: '-apple-system, Helvetica Neue, Arial', size: 11 },
+  boxWidth: 10,
+  padding: 12,
+  usePointStyle: true,
+};
+
+function axisX() {
   return {
-    borderWidth: 2,
-    pointRadius: 3,
-    pointHoverRadius: 5,
-    tension: 0.35,
-    fill: false,
+    ticks:  { color: 'rgba(240,238,248,0.35)', font: { size: 10 }, maxRotation: 40 },
+    grid:   { color: 'rgba(107,57,175,0.08)', drawBorder: false },
   };
 }
 
-function axisDefaults(title) {
+function axisY(label) {
   return {
-    ticks:  { color: 'rgba(240,238,248,0.4)', font: { size: 10 }, maxRotation: 45 },
-    grid:   { color: 'rgba(107,57,175,0.12)' },
-    title:  title ? { display: true, text: title, color: 'rgba(240,238,248,0.35)', font: { size: 10 } } : undefined,
+    ticks: {
+      color: 'rgba(240,238,248,0.35)',
+      font:  { size: 10 },
+      callback: label === 'ZAR' || label === 'ZAR/oz' ? v => zarK(v) : undefined,
+    },
+    grid:   { color: 'rgba(107,57,175,0.08)', drawBorder: false },
+    border: { dash: [3, 3] },
+    title:  label ? { display: true, text: label, color: 'rgba(240,238,248,0.3)', font: { size: 9 } } : undefined,
   };
 }
 
-// ─── VOLUME BY DAY (bar chart) ────────────────────────────────────────────────
+function tooltipStyle() {
+  return {
+    backgroundColor: 'rgba(21,14,38,0.95)',
+    borderColor:     'rgba(107,57,175,0.4)',
+    borderWidth:     1,
+    titleColor:      'rgba(240,238,248,0.9)',
+    bodyColor:       'rgba(240,238,248,0.65)',
+    padding:         10,
+    cornerRadius:    8,
+  };
+}
+
+function makeGradient(ctx, color1, color2) {
+  try {
+    const g = ctx.createLinearGradient(0, 0, 0, 200);
+    g.addColorStop(0,   color1);
+    g.addColorStop(1,   color2);
+    return g;
+  } catch { return color1; }
+}
+
+function emptyChartNote(canvas) {
+  // Show "No data" overlay when chart has nothing to show
+  const wrap = canvas?.parentElement;
+  if (!wrap) return;
+  let note = wrap.querySelector('.chart-empty');
+  if (!note) {
+    note = document.createElement('div');
+    note.className = 'chart-empty';
+    wrap.style.position = 'relative';
+    wrap.appendChild(note);
+  }
+  note.textContent = 'No data for selected period';
+  note.style.display = '';
+}
+
+function clearEmptyNote(canvas) {
+  const note = canvas?.parentElement?.querySelector('.chart-empty');
+  if (note) note.style.display = 'none';
+}
+
+// ─── VOLUME BY DAY ────────────────────────────────────────────────────────────
 function renderVolumeChart(deals) {
-  const ctx    = document.getElementById('volume-chart')?.getContext('2d');
+  const canvas = document.getElementById('volume-chart');
+  const ctx    = canvas?.getContext('2d');
   if (!ctx) return;
   const groups = groupByDate(deals);
-  const labels = groups.map(([dt]) => dt.slice(5)); // MM-DD
-  const buyOz  = groups.map(([, g]) => g.buys.reduce((s, d)  => s + (d.oz || 0), 0));
-  const sellOz = groups.map(([, g]) => g.sells.reduce((s, d) => s + (d.oz || 0), 0));
+
+  if (!groups.length) { emptyChartNote(canvas); if (volumeChart) { volumeChart.destroy(); volumeChart = null; } return; }
+  clearEmptyNote(canvas);
+
+  const labels = groups.map(([dt]) => formatDateShort(dt));
+  const buyOz  = groups.map(([, g]) => +g.buys.reduce((s, d)  => s + (d.oz || 0), 0).toFixed(2));
+  const sellOz = groups.map(([, g]) => +g.sells.reduce((s, d) => s + (d.oz || 0), 0).toFixed(2));
 
   if (volumeChart) volumeChart.destroy();
   volumeChart = new Chart(ctx, {
@@ -739,29 +808,38 @@ function renderVolumeChart(deals) {
     data: {
       labels,
       datasets: [
-        { label: 'Buybacks (oz)', data: buyOz,  backgroundColor: 'rgba(64,181,173,0.75)',  borderRadius: 4 },
-        { label: 'Sales (oz)',    data: sellOz,  backgroundColor: 'rgba(212,167,85,0.75)', borderRadius: 4 },
+        { label: 'Buybacks', data: buyOz,
+          backgroundColor: makeGradient(ctx, 'rgba(64,181,173,0.85)', 'rgba(64,181,173,0.35)'),
+          borderColor: '#40B5AD', borderWidth: 1, borderRadius: 5, borderSkipped: false },
+        { label: 'Sales',    data: sellOz,
+          backgroundColor: makeGradient(ctx, 'rgba(212,167,85,0.85)', 'rgba(212,167,85,0.35)'),
+          borderColor: '#D4A755', borderWidth: 1, borderRadius: 5, borderSkipped: false },
       ],
     },
     options: {
-      responsive: true,
+      ...CHART_DEFAULTS,
       plugins: {
-        legend: { labels: { color: 'rgba(240,238,248,0.55)', font: { size: 11 }, boxWidth: 10, padding: 10 } },
+        legend: { labels: LEGEND_STYLE },
+        tooltip: { ...tooltipStyle(), callbacks: {
+          label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(2)} oz`,
+        }},
       },
-      scales: {
-        x: axisDefaults(),
-        y: { ...axisDefaults('oz'), beginAtZero: true },
-      },
+      scales: { x: axisX(), y: { ...axisY('oz'), beginAtZero: true } },
     },
   });
 }
 
-// ─── VWAP TREND (line chart) ──────────────────────────────────────────────────
+// ─── VWAP TREND ───────────────────────────────────────────────────────────────
 function renderVwapChart(deals) {
-  const ctx    = document.getElementById('vwap-chart')?.getContext('2d');
+  const canvas = document.getElementById('vwap-chart');
+  const ctx    = canvas?.getContext('2d');
   if (!ctx) return;
   const groups = groupByDate(deals);
-  const labels = groups.map(([dt]) => dt.slice(5));
+
+  if (!groups.length) { emptyChartNote(canvas); if (vwapChart) { vwapChart.destroy(); vwapChart = null; } return; }
+  clearEmptyNote(canvas);
+
+  const labels = groups.map(([dt]) => formatDateShort(dt));
 
   function dayVwap(subset) {
     const oz  = subset.reduce((s, d) => s + (d.oz || 0), 0);
@@ -778,39 +856,47 @@ function renderVwapChart(deals) {
     data: {
       labels,
       datasets: [
-        { label: 'Buy VWAP',  data: buyVwap,  borderColor: '#40B5AD', pointBackgroundColor: '#40B5AD', ...lineChartDefaults() },
-        { label: 'Sell VWAP', data: sellVwap, borderColor: '#D4A755', pointBackgroundColor: '#D4A755', ...lineChartDefaults() },
+        { label: 'Buy VWAP',  data: buyVwap,
+          borderColor: '#40B5AD', backgroundColor: 'rgba(64,181,173,0.08)',
+          pointBackgroundColor: '#40B5AD', pointRadius: 4, pointHoverRadius: 6,
+          borderWidth: 2, tension: 0.35, fill: true, spanGaps: true },
+        { label: 'Sell VWAP', data: sellVwap,
+          borderColor: '#D4A755', backgroundColor: 'rgba(212,167,85,0.08)',
+          pointBackgroundColor: '#D4A755', pointRadius: 4, pointHoverRadius: 6,
+          borderWidth: 2, tension: 0.35, fill: true, spanGaps: true },
       ],
     },
     options: {
-      responsive: true,
-      spanGaps: true,
+      ...CHART_DEFAULTS,
       plugins: {
-        legend: { labels: { color: 'rgba(240,238,248,0.55)', font: { size: 11 }, boxWidth: 10, padding: 10 } },
-        tooltip: {
-          callbacks: {
-            label: ctx => ctx.dataset.label + ': R ' + (ctx.parsed.y || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 }),
-          }
-        }
+        legend: { labels: LEGEND_STYLE },
+        tooltip: { ...tooltipStyle(), callbacks: {
+          label: c => ` ${c.dataset.label}: R ${(c.parsed.y || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}/oz`,
+        }},
       },
-      scales: {
-        x: axisDefaults(),
-        y: { ...axisDefaults('ZAR/oz') },
-      },
+      scales: { x: axisX(), y: axisY('ZAR/oz') },
     },
   });
 }
 
-// ─── DAILY GP (bar chart) ─────────────────────────────────────────────────────
+// ─── DAILY GP ─────────────────────────────────────────────────────────────────
 function renderGpChart(deals) {
-  const ctx    = document.getElementById('gp-chart')?.getContext('2d');
+  const canvas = document.getElementById('gp-chart');
+  const ctx    = canvas?.getContext('2d');
   if (!ctx) return;
   const groups = groupByDate(deals);
-  const labels = groups.map(([dt]) => dt.slice(5));
-  const gpData = groups.map(([, g]) => {
-    const all = [...g.buys, ...g.sells];
-    return all.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
-  });
+
+  if (!groups.length) { emptyChartNote(canvas); if (gpChart) { gpChart.destroy(); gpChart = null; } return; }
+  clearEmptyNote(canvas);
+
+  const labels = groups.map(([dt]) => formatDateShort(dt));
+  const gpData = groups.map(([, g]) =>
+    [...g.buys, ...g.sells].reduce((s, d) => s + (d.gp_contribution_zar || 0), 0)
+  );
+  const colors = gpData.map(v =>
+    v >= 0 ? 'rgba(123,79,201,0.8)' : 'rgba(224,82,82,0.75)'
+  );
+  const borders = gpData.map(v => v >= 0 ? '#7B4FC9' : '#E05252');
 
   if (gpChart) gpChart.destroy();
   gpChart = new Chart(ctx, {
@@ -818,76 +904,97 @@ function renderGpChart(deals) {
     data: {
       labels,
       datasets: [{
-        label: 'GP (ZAR)',
+        label: 'Daily GP',
         data: gpData,
-        backgroundColor: gpData.map(v => v >= 0 ? 'rgba(123,79,201,0.75)' : 'rgba(224,82,82,0.7)'),
-        borderRadius: 4,
+        backgroundColor: colors,
+        borderColor: borders,
+        borderWidth: 1,
+        borderRadius: 5,
+        borderSkipped: false,
       }],
     },
     options: {
-      responsive: true,
+      ...CHART_DEFAULTS,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => 'GP: R ' + (ctx.parsed.y || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 }),
-          }
-        }
+        tooltip: { ...tooltipStyle(), callbacks: {
+          label: c => ` GP: R ${(c.parsed.y || 0).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}`,
+        }},
       },
-      scales: {
-        x: axisDefaults(),
-        y: { ...axisDefaults('ZAR') },
-      },
+      scales: { x: axisX(), y: axisY('ZAR') },
     },
   });
 }
 
-function chartOptions(legendColor) {
+// ─── SILO + CHANNEL DOUGHNUTS ─────────────────────────────────────────────────
+
+function doughnutOptions(title) {
   return {
+    ...CHART_DEFAULTS,
+    cutout: '70%',
     plugins: {
       legend: {
-        labels: {
-          color: legendColor || 'rgba(240,238,248,0.6)',
-          font: { family: '-apple-system, Helvetica Neue, Arial', size: 11 },
-          boxWidth: 10,
-          padding: 12,
-        }
-      }
+        position: 'bottom',
+        labels: { ...LEGEND_STYLE, padding: 10 },
+      },
+      tooltip: { ...tooltipStyle(), callbacks: {
+        label: c => ` ${c.label}: ${c.parsed.toFixed(1)}%`,
+      }},
+      title: title ? {
+        display: true,
+        text:  title,
+        color: 'rgba(240,238,248,0.45)',
+        font:  { size: 10 },
+        padding: { bottom: 4 },
+      } : undefined,
     },
-    cutout: '68%',
   };
 }
 
 function renderSiloChart(data) {
-  const ctx    = document.getElementById('silo-chart').getContext('2d');
+  const canvas = document.getElementById('silo-chart');
+  const ctx    = canvas?.getContext('2d');
+  if (!ctx) return;
   const labels = Object.keys(data);
   const values = labels.map(k => data[k].gp_proportion_pct || 0);
+
+  if (!labels.length || values.every(v => v === 0)) {
+    emptyChartNote(canvas); if (siloChart) { siloChart.destroy(); siloChart = null; } return;
+  }
+  clearEmptyNote(canvas);
 
   if (siloChart) siloChart.destroy();
   siloChart = new Chart(ctx, {
     type: 'doughnut',
-    data: {
-      labels,
-      datasets: [{ data: values, backgroundColor: BRAND_COLORS, borderWidth: 0, hoverOffset: 6 }]
-    },
-    options: chartOptions(),
+    data: { labels, datasets: [{ data: values, backgroundColor: BRAND_COLORS, borderWidth: 2, borderColor: '#150E26', hoverOffset: 8 }] },
+    options: doughnutOptions(),
   });
 }
 
 function renderChannelChart(data) {
-  const ctx    = document.getElementById('channel-chart').getContext('2d');
+  const canvas = document.getElementById('channel-chart');
+  const ctx    = canvas?.getContext('2d');
+  if (!ctx) return;
   const labels = Object.keys(data);
   const values = labels.map(k => data[k].gp_proportion_pct || 0);
+
+  if (!labels.length || values.every(v => v === 0)) {
+    emptyChartNote(canvas); if (channelChart) { channelChart.destroy(); channelChart = null; } return;
+  }
+  clearEmptyNote(canvas);
 
   if (channelChart) channelChart.destroy();
   channelChart = new Chart(ctx, {
     type: 'doughnut',
-    data: {
-      labels,
-      datasets: [{ data: values, backgroundColor: BRAND_COLORS.slice(1), borderWidth: 0, hoverOffset: 6 }]
-    },
-    options: chartOptions(),
+    data: { labels, datasets: [{ data: values, backgroundColor: BRAND_COLORS.slice(1), borderWidth: 2, borderColor: '#150E26', hoverOffset: 8 }] },
+    options: doughnutOptions(),
   });
+}
+
+function formatDateShort(iso) {
+  if (!iso || iso === 'unknown') return '?';
+  try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }); }
+  catch { return iso.slice(5); }
 }
 
 // ─── UTILITIES ────────────────────────────────────────────────────────────────

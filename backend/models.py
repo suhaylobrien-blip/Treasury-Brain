@@ -3,6 +3,7 @@ Treasury Brain — Database Layer (SQLite)
 Single source of truth for all deal, inventory, hedging, cash flow and bank data.
 """
 
+import hashlib
 import sqlite3
 import os
 from datetime import date
@@ -67,11 +68,16 @@ def init_db():
     for col, definition in [
         ('status',       "TEXT DEFAULT 'confirmed'"),
         ('product_type', "TEXT DEFAULT 'bullion'"),
+        ('deal_hash',    "TEXT"),
     ]:
         try:
             c.execute(f"ALTER TABLE deals ADD COLUMN {col} {definition}")
         except Exception:
             pass  # column already exists
+    try:
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_hash ON deals(deal_hash) WHERE deal_hash IS NOT NULL")
+    except Exception:
+        pass
 
     # ── PIPELINE (quotes — yellow rows) ──────────────────────────────────
     c.execute("""
@@ -291,9 +297,30 @@ def delete_pipeline_row(pipeline_id: int):
     conn.close()
 
 
+def _make_deal_hash(deal: dict) -> str:
+    """Stable fingerprint for deduplication — same deal = same hash."""
+    key = '|'.join(str(deal.get(f, '')) for f in [
+        'entity', 'metal', 'deal_type', 'deal_date',
+        'dealer_name', 'product_code', 'units', 'spot_price_zar', 'margin_pct',
+    ])
+    return hashlib.md5(key.encode()).hexdigest()
+
+
 def insert_deal(deal: dict) -> int:
+    """Insert a deal. Returns existing id if an identical deal already exists (dedup)."""
+    deal_hash = _make_deal_hash(deal)
+    deal      = {**deal, 'deal_hash': deal_hash}   # attach hash to record
+
     conn = get_conn()
     c    = conn.cursor()
+
+    # Deduplication check — same fingerprint = same deal, skip insert
+    c.execute("SELECT id FROM deals WHERE deal_hash=?", (deal_hash,))
+    existing = c.fetchone()
+    if existing:
+        conn.close()
+        return -existing['id']   # negative id signals "already existed"
+
     cols = ', '.join(deal.keys())
     phs  = ', '.join(['?'] * len(deal))
     c.execute(f"INSERT INTO deals ({cols}) VALUES ({phs})", list(deal.values()))
