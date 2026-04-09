@@ -404,6 +404,41 @@ def get_cash_flows(entity: str, from_date: str = None, to_date: str = None) -> l
 # SPOT PRICE OPERATIONS
 # ─────────────────────────────────────────────
 
+def get_hedging_positions(entity: str, metal: str) -> list:
+    """Return all open hedging / other positions (Stone X, SAM, Proofs, etc.)."""
+    conn = get_conn()
+    c    = conn.cursor()
+    c.execute("""
+        SELECT * FROM hedging
+        WHERE entity=? AND metal=? AND status='open'
+        ORDER BY open_date DESC, id DESC
+    """, (entity, metal))
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def insert_hedging_position(record: dict) -> int:
+    conn = get_conn()
+    c    = conn.cursor()
+    cols = ', '.join(record.keys())
+    phs  = ', '.join(['?'] * len(record))
+    c.execute(f"INSERT INTO hedging ({cols}) VALUES ({phs})", list(record.values()))
+    row_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return row_id
+
+
+def close_hedging_position(position_id: int):
+    conn = get_conn()
+    conn.execute("""
+        UPDATE hedging SET status='closed', close_date=date('now') WHERE id=?
+    """, (position_id,))
+    conn.commit()
+    conn.close()
+
+
 def insert_spot_price(metal: str, price_zar: float, source: str = 'api'):
     conn = get_conn()
     conn.execute("INSERT INTO spot_prices (metal, price_zar, source) VALUES (?,?,?)",

@@ -12,7 +12,8 @@ from flask import Flask, jsonify, request, send_from_directory, abort
 from models import (
     get_deals, get_inventory, get_aged_inventory, get_latest_spot,
     get_cash_flows, insert_spot_price, init_db, reset_entity_data,
-    set_inventory_position
+    set_inventory_position,
+    get_hedging_positions, insert_hedging_position, close_hedging_position
 )
 from processor import (
     get_provision_mode, live_impact_preview, build_daily_summary,
@@ -277,6 +278,58 @@ def channel_analytics():
     on_date = request.args.get('date')
     deals   = get_deals(entity, metal, on_date)
     return jsonify(calc_channel_analytics(deals))
+
+
+# ─────────────────────────────────────────────
+# HEDGING POSITIONS
+# ─────────────────────────────────────────────
+
+@app.route('/api/hedging')
+def hedging_endpoint():
+    """Return all open hedge/position entries for an entity + metal."""
+    entity = request.args.get('entity', 'SABIS')
+    metal  = request.args.get('metal',  'gold')
+    positions = get_hedging_positions(entity, metal)
+    long_oz  = sum(p['contract_oz'] for p in positions if p['position_type'] == 'long')
+    short_oz = sum(p['contract_oz'] for p in positions if p['position_type'] == 'short')
+    return jsonify({
+        'positions': positions,
+        'long_oz':   round(long_oz,  2),
+        'short_oz':  round(short_oz, 2),
+        'net_oz':    round(long_oz - short_oz, 2),
+    })
+
+
+@app.route('/api/hedging', methods=['POST'])
+def add_hedging():
+    """
+    Add a hedging / position entry.
+    Body: { entity, metal, position_type ('long'|'short'), contract_oz,
+            open_price_zar, platform, notes, open_date (optional) }
+    """
+    data   = request.json or {}
+    entity = data.get('entity', 'SABIS').upper()
+    metal  = data.get('metal',  'gold').lower()
+    record = {
+        'entity':         entity,
+        'metal':          metal,
+        'position_type':  data.get('position_type', 'long'),
+        'open_date':      data.get('open_date', date.today().isoformat()),
+        'contract_oz':    float(data.get('contract_oz', 0)),
+        'open_price_zar': float(data.get('open_price_zar') or get_latest_spot(metal)),
+        'platform':       data.get('platform', ''),
+        'notes':          data.get('notes', ''),
+        'status':         'open',
+    }
+    position_id = insert_hedging_position(record)
+    return jsonify({'status': 'ok', 'id': position_id})
+
+
+@app.route('/api/hedging/<int:position_id>', methods=['DELETE'])
+def remove_hedging(position_id):
+    """Close/remove a hedging position by id."""
+    close_hedging_position(position_id)
+    return jsonify({'status': 'ok', 'closed': position_id})
 
 
 # ─────────────────────────────────────────────

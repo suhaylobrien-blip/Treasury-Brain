@@ -106,13 +106,15 @@ function buildDealsUrl() {
 // ─── LOAD ALL ────────────────────────────────────────────────────────────────
 
 async function loadAll() {
-  const [deals, inv] = await Promise.all([
+  const [deals, inv, hedging] = await Promise.all([
     api(buildDealsUrl()).catch(() => []),
     api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({})),
+    api(`/api/hedging?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({ positions: [], long_oz: 0, short_oz: 0, net_oz: 0 })),
   ]);
 
-  renderExposure(deals, inv);
+  renderExposure(deals, inv, hedging);
   renderTrading(deals);
+  renderHedging(hedging, inv);
   renderDealsTable(deals);
   renderAgedInventory(inv.aged_parcels || []);
   await loadSpot();
@@ -120,29 +122,32 @@ async function loadAll() {
 
 // ─── EXPOSURE BANNER ─────────────────────────────────────────────────────────
 
-function renderExposure(deals, inv) {
-  const spot = inv.spot_zar  || 0;
-  const prov = inv.provision || {};
+function renderExposure(deals, inv, hedging) {
+  const spot      = inv.spot_zar  || 0;
+  const bullionOz = inv.total_oz  || 0;
+  const hedgeNet  = (hedging && hedging.net_oz) || 0;
 
-  // Net exposure from the filtered period: positive = net long, negative = net short
-  const buyOz  = deals.filter(d => d.deal_type === 'buy').reduce((s, d)  => s + (d.oz || 0), 0);
-  const sellOz = deals.filter(d => d.deal_type === 'sell').reduce((s, d) => s + (d.oz || 0), 0);
-  const netOz  = buyOz - sellOz;
+  // Ecosystem net = bullion/physical inventory + net hedge positions
+  const ecosystemOz = bullionOz + hedgeNet;
+
+  // Provision mode driven by ecosystem net, not raw bullion alone
+  const provActive = ecosystemOz < 0;
+  const provRate   = (inv.provision || {}).rate_pct || 0;
 
   const totalGP = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
 
-  set('exp-oz',        fmt(netOz, 2) + ' oz');
-  set('exp-value-zar', formatZAR(Math.abs(netOz) * spot));
+  set('exp-oz',        fmt(ecosystemOz, 2) + ' oz');
+  set('exp-value-zar', formatZAR(Math.abs(ecosystemOz) * spot));
   set('exp-gp',        formatZAR(totalGP));
   set('exp-gp-sub',    `${deals.length} deal${deals.length !== 1 ? 's' : ''} total`);
   set('exp-spot',      formatZAR(spot));
-  set('exp-provision', prov.mode || '–');
-  set('exp-prov-sub',  prov.active ? `${prov.rate_pct}% applies` : 'No provision active');
+  set('exp-provision', provActive ? 'PROVISION' : 'NO PROVISION');
+  set('exp-prov-sub',  provActive ? `${provRate}% applies` : 'Hedged to neutral');
 
   const provCard = document.getElementById('exp-card-provision');
   if (provCard) {
-    provCard.classList.toggle('active',   !!prov.active);
-    provCard.classList.toggle('inactive', !prov.active);
+    provCard.classList.toggle('active',   provActive);
+    provCard.classList.toggle('inactive', !provActive);
   }
 }
 
@@ -182,13 +187,7 @@ function renderTrading(deals) {
   set('sell-value',  formatZAR(s.val));
   set('sell-gp',     formatZAR(s.gp));
 
-  // Hedging — placeholders until hedging API is wired up
-  set('hedge-long-oz',  '– oz');
-  set('hedge-long-val', 'Not configured');
-  set('hedge-short-oz', '– oz');
-  set('hedge-short-val','Not configured');
-  set('hedge-net-oz',   '– oz');
-  set('hedge-net-val',  'Not configured');
+  // Hedging rendered separately via renderHedging()
 
   // Silo / channel charts
   renderSiloChart(calcSiloStats(deals));
@@ -197,6 +196,88 @@ function renderTrading(deals) {
   renderVwapChart(deals);
   renderGpChart(deals);
   renderDealerTable(deals);
+}
+
+// ─── HEDGING / POSITIONS ─────────────────────────────────────────────────────
+
+function renderHedging(hedging, inv) {
+  const longOz      = hedging.long_oz  || 0;
+  const shortOz     = hedging.short_oz || 0;
+  const netOz       = hedging.net_oz   || 0;
+  const bullionOz   = (inv && inv.total_oz) || 0;
+  const ecosystemOz = bullionOz + netOz;
+  const positions   = hedging.positions || [];
+
+  set('hedge-count',      `${positions.length} position${positions.length !== 1 ? 's' : ''}`);
+  set('hedge-long-oz',    fmt(longOz,      2) + ' oz');
+  set('hedge-long-val',   '');
+  set('hedge-short-oz',   fmt(shortOz,     2) + ' oz');
+  set('hedge-short-val',  '');
+  set('hedge-net-oz',     fmt(netOz,       2) + ' oz');
+  set('hedge-ecosystem-oz', fmt(ecosystemOz, 2) + ' oz');
+
+  // Render individual position rows
+  const list = document.getElementById('hedge-positions-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (!positions.length) {
+    list.innerHTML = '<div class="hedge-pos-empty">No positions — add below</div>';
+    return;
+  }
+
+  positions.forEach(p => {
+    const isLong = p.position_type === 'long';
+    const div = document.createElement('div');
+    div.className = 'hedge-pos-row';
+    div.innerHTML = `
+      <span class="hedge-pos-platform">${p.platform || 'Unknown'}</span>
+      <span class="hedge-pos-type ${isLong ? 'long-label' : 'short-label'}">${isLong ? 'Long' : 'Short'}</span>
+      <span class="hedge-pos-oz ${isLong ? 'long-val' : 'short-val'}">${fmt(p.contract_oz, 2)} oz</span>
+      <span class="hedge-pos-price">${formatZAR(p.open_price_zar)}</span>
+      <button class="btn-hedge-remove" onclick="removeHedgePosition(${p.id})" title="Remove">×</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+async function addHedgePosition() {
+  const platform = document.getElementById('h-platform')?.value || '';
+  const type     = document.getElementById('h-type')?.value    || 'long';
+  const oz       = parseFloat(document.getElementById('h-oz')?.value);
+  const price    = parseFloat(document.getElementById('h-price')?.value) || null;
+
+  if (!oz || isNaN(oz)) { showToast('Enter a valid oz amount', true); return; }
+
+  try {
+    await api('/api/hedging', {
+      method: 'POST',
+      json: {
+        entity:         currentEntity,
+        metal:          currentMetal,
+        position_type:  type,
+        contract_oz:    oz,
+        open_price_zar: price,
+        platform:       platform,
+      },
+    });
+    // Clear inputs
+    document.getElementById('h-oz').value    = '';
+    document.getElementById('h-price').value = '';
+    showToast(`Added ${type} ${oz} oz on ${platform}`);
+    loadAll();
+  } catch (e) {
+    showToast('Failed to add position: ' + e.message, true);
+  }
+}
+
+async function removeHedgePosition(id) {
+  try {
+    await api(`/api/hedging/${id}`, { method: 'DELETE' });
+    loadAll();
+  } catch (e) {
+    showToast('Failed to remove position: ' + e.message, true);
+  }
 }
 
 // ─── DEALER BREAKDOWN TABLE ───────────────────────────────────────────────────

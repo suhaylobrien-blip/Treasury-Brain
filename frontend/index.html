@@ -149,33 +149,64 @@
     <!-- HEDGING -->
     <section class="card trading-card">
       <div class="tc-header hedge-header">
-        <span class="tc-title">Hedging</span>
+        <span class="tc-title">Hedging &amp; Positions</span>
+        <span class="tc-badge" id="hedge-count">0 positions</span>
       </div>
+
+      <!-- Summary rows -->
       <div class="hedge-rows">
         <div class="hedge-item">
-          <div class="hedge-side long-label">Longs</div>
+          <div class="hedge-side long-label">Total Longs</div>
           <div class="hedge-nums">
-            <div class="hedge-oz  long-val" id="hedge-long-oz">–</div>
-            <div class="hedge-val"           id="hedge-long-val">–</div>
+            <div class="hedge-oz long-val" id="hedge-long-oz">–</div>
+            <div class="hedge-val"         id="hedge-long-val">–</div>
           </div>
         </div>
         <div class="hedge-item">
-          <div class="hedge-side short-label">Shorts</div>
+          <div class="hedge-side short-label">Total Shorts</div>
           <div class="hedge-nums">
-            <div class="hedge-oz  short-val" id="hedge-short-oz">–</div>
-            <div class="hedge-val"            id="hedge-short-val">–</div>
+            <div class="hedge-oz short-val" id="hedge-short-oz">–</div>
+            <div class="hedge-val"          id="hedge-short-val">–</div>
           </div>
         </div>
         <div class="hedge-divider"></div>
         <div class="hedge-item">
-          <div class="hedge-side net-label">Net Position</div>
+          <div class="hedge-side net-label">Net Hedge</div>
           <div class="hedge-nums">
             <div class="hedge-oz" id="hedge-net-oz">–</div>
-            <div class="hedge-val" id="hedge-net-val">–</div>
+          </div>
+        </div>
+        <div class="hedge-item">
+          <div class="hedge-side" style="color:var(--gold);font-weight:700">Ecosystem Net</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz" id="hedge-ecosystem-oz" style="color:var(--gold)">–</div>
           </div>
         </div>
       </div>
-      <div class="hedge-note">Hedging positions tracked separately</div>
+
+      <!-- Individual positions list -->
+      <div id="hedge-positions-list" class="hedge-positions-list"></div>
+
+      <!-- Add position form -->
+      <div class="hedge-add-form">
+        <div class="hedge-add-row">
+          <select id="h-platform">
+            <option>Stone X</option>
+            <option>SAM</option>
+            <option>Proofs</option>
+            <option>Other</option>
+          </select>
+          <select id="h-type">
+            <option value="long">Long</option>
+            <option value="short">Short</option>
+          </select>
+        </div>
+        <div class="hedge-add-row">
+          <input type="number" id="h-oz"    placeholder="Oz"    step="any" />
+          <input type="number" id="h-price" placeholder="Price (ZAR/oz)" step="any" />
+          <button class="btn-hedge-add" onclick="addHedgePosition()">+ Add</button>
+        </div>
+      </div>
     </section>
 
   </div>

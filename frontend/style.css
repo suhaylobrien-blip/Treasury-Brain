@@ -362,6 +362,80 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 .hedge-divider { height: 1px; background: var(--border); margin: 2px 0; }
 .hedge-note { padding: 0 20px 14px; font-size: 11px; color: var(--muted2); font-style: italic; }
 
+/* ── HEDGE POSITIONS LIST ────────────────────────────────────────────────── */
+.hedge-positions-list {
+  margin: 8px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+.hedge-pos-empty { font-size: 11px; color: var(--muted2); padding: 4px 0; }
+.hedge-pos-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--raised);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.hedge-pos-platform { color: var(--text); font-weight: 600; min-width: 58px; }
+.hedge-pos-type     { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; min-width: 36px; }
+.hedge-pos-oz       { flex: 1; font-weight: 600; }
+.hedge-pos-price    { color: var(--muted); font-size: 11px; }
+.btn-hedge-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color .15s;
+}
+.btn-hedge-remove:hover { color: var(--red); }
+
+/* ── HEDGE ADD FORM ──────────────────────────────────────────────────────── */
+.hedge-add-form {
+  margin: 10px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hedge-add-row {
+  display: flex;
+  gap: 6px;
+}
+.hedge-add-form select,
+.hedge-add-form input {
+  flex: 1;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+  min-width: 0;
+}
+.hedge-add-form select:focus,
+.hedge-add-form input:focus { border-color: var(--purple); }
+.btn-hedge-add {
+  background: rgba(123,79,201,0.25);
+  border: 1px solid var(--purple);
+  color: var(--purple-lt);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.btn-hedge-add:hover { background: rgba(123,79,201,0.45); }
+
 /* ── DATE FILTER TOOLBAR ────────────────────────────────────────────────── */
 .filter-toolbar {
   display: flex;
