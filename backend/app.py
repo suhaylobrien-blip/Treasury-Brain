@@ -11,7 +11,7 @@ from flask import Flask, jsonify, request, send_from_directory, abort
 
 from models import (
     get_deals, get_inventory, get_aged_inventory, get_latest_spot,
-    get_cash_flows, insert_spot_price, init_db
+    get_cash_flows, insert_spot_price, init_db, reset_entity_data
 )
 from processor import (
     get_provision_mode, live_impact_preview, build_daily_summary,
@@ -258,6 +258,20 @@ def channel_analytics():
 # ─────────────────────────────────────────────
 # FILE UPLOAD (manual trigger)
 # ─────────────────────────────────────────────
+
+@app.route('/api/reset', methods=['POST'])
+def reset_data():
+    """
+    Wipe all deals + inventory for a given entity + metal so they can be
+    re-imported with corrected GP/provision calculations.
+    Body: { entity, metal }  — defaults to SABIS + gold if omitted.
+    """
+    data   = request.json or {}
+    entity = data.get('entity', 'SABIS').upper()
+    metal  = data.get('metal',  'gold').lower()
+    reset_entity_data(entity, metal)
+    return jsonify({'status': 'ok', 'cleared': f'{entity} / {metal}'})
+
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():

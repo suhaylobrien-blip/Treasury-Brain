@@ -181,6 +181,65 @@ function renderTrading(deals) {
   renderVolumeChart(deals);
   renderVwapChart(deals);
   renderGpChart(deals);
+  renderDealerTable(deals);
+}
+
+// ─── DEALER BREAKDOWN TABLE ───────────────────────────────────────────────────
+
+function renderDealerTable(deals) {
+  const tbody = document.getElementById('dealer-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  // Group by dealer name
+  const dealers = {};
+  deals.forEach(d => {
+    const name = (d.dealer_name || '').trim() || 'Unknown';
+    if (!dealers[name]) dealers[name] = { buys: [], sells: [] };
+    if (d.deal_type === 'buy')  dealers[name].buys.push(d);
+    else                         dealers[name].sells.push(d);
+  });
+
+  const totalGP = deals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+
+  // Sort by total GP descending
+  const sorted = Object.entries(dealers).sort(([, a], [, b]) => {
+    const gpA = [...a.buys, ...a.sells].reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+    const gpB = [...b.buys, ...b.sells].reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+    return gpB - gpA;
+  });
+
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">No dealer data</td></tr>';
+    return;
+  }
+
+  sorted.forEach(([name, { buys, sells }]) => {
+    const all   = [...buys, ...sells];
+    const buyOz  = buys.reduce((s, d)  => s + (d.oz || 0), 0);
+    const sellOz = sells.reduce((s, d) => s + (d.oz || 0), 0);
+    const buyVal  = buys.reduce((s, d)  => s + (d.deal_value_zar || 0), 0);
+    const sellVal = sells.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
+    const buyVwap  = buyOz  > 0 ? buyVal  / buyOz  : 0;
+    const sellVwap = sellOz > 0 ? sellVal / sellOz : 0;
+    const gp       = all.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+    const gpPct    = totalGP > 0 ? (gp / totalGP) * 100 : 0;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight:600;color:var(--text)">${name}</td>
+      <td>${all.length}</td>
+      <td class="buy">${buys.length}</td>
+      <td class="sell">${sells.length}</td>
+      <td>${fmt(buyOz, 4)} oz</td>
+      <td>${fmt(sellOz, 4)} oz</td>
+      <td>${buyVwap  > 0 ? formatZAR(buyVwap)  : '–'}</td>
+      <td>${sellVwap > 0 ? formatZAR(sellVwap) : '–'}</td>
+      <td style="color:${gp >= 0 ? 'var(--gold)' : 'var(--red)'};font-weight:600">${formatZAR(gp)}</td>
+      <td style="color:var(--muted)">${fmt(gpPct, 1)}%</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 // ─── DEALS TABLE ─────────────────────────────────────────────────────────────
@@ -353,6 +412,22 @@ function renderPreview(r) {
       <span class="preview-val ${flip ? 'alert' : ''}">${(r.provision_before||{}).mode} → ${(r.provision_after||{}).mode}</span></div>
     ${flip ? '<div class="flip-warning">This deal changes provision mode</div>' : ''}
   `;
+}
+
+// ─── RESET DATA ───────────────────────────────────────────────────────────────
+
+async function resetData() {
+  const confirmed = window.confirm(
+    `Clear ALL deals and inventory for ${currentEntity} / ${currentMetal}?\n\nThis cannot be undone. Re-upload the dealer sheet after resetting.`
+  );
+  if (!confirmed) return;
+  try {
+    const r = await api('/api/reset', { method: 'POST', json: { entity: currentEntity, metal: currentMetal } });
+    showToast(`Reset complete: ${r.cleared} — re-upload your sheet`);
+    loadAll();
+  } catch (e) {
+    showToast('Reset failed: ' + e.message, true);
+  }
 }
 
 // ─── FILE UPLOAD ──────────────────────────────────────────────────────────────

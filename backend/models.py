@@ -239,6 +239,23 @@ def init_db():
 # DEAL OPERATIONS
 # ─────────────────────────────────────────────
 
+def reset_entity_data(entity: str, metal: str):
+    """
+    Wipe all deals, inventory, pipeline, cash flows, and ageing parcels
+    for a given entity + metal combination so data can be re-imported
+    with corrected calculations.
+    """
+    conn = get_conn()
+    c    = conn.cursor()
+    c.execute("DELETE FROM deals            WHERE entity=? AND metal=?", (entity, metal))
+    c.execute("DELETE FROM pipeline         WHERE entity=? AND metal=?", (entity, metal))
+    c.execute("DELETE FROM inventory        WHERE entity=? AND metal=?", (entity, metal))
+    c.execute("DELETE FROM inventory_ageing WHERE entity=? AND metal=?", (entity, metal))
+    c.execute("DELETE FROM cash_flows       WHERE entity=?",             (entity,))
+    conn.commit()
+    conn.close()
+
+
 def insert_pipeline(record: dict) -> int:
     conn = get_conn()
     c    = conn.cursor()

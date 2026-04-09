@@ -169,6 +169,32 @@
   </div>
 
   <!-- ═══════════════════════════════════════════
+       DEALER BREAKDOWN
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width">
+    <h2>Dealer Contributions</h2>
+    <div class="table-wrap">
+      <table id="dealer-table">
+        <thead>
+          <tr>
+            <th>Dealer</th>
+            <th>Deals</th>
+            <th>Buybacks</th>
+            <th>Sales</th>
+            <th>Buy Volume (oz)</th>
+            <th>Sell Volume (oz)</th>
+            <th>Buy VWAP</th>
+            <th>Sell VWAP</th>
+            <th>GP Contribution</th>
+            <th>GP %</th>
+          </tr>
+        </thead>
+        <tbody id="dealer-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
        CHARTS ROW  (Volume by day + VWAP trend)
   ═══════════════════════════════════════════ -->
   <div class="charts-row">
@@ -241,10 +267,15 @@
   <section class="card full-width">
     <div class="card-header">
       <h2>Deals <span id="deals-count-label" class="count-label"></span></h2>
-      <label class="upload-label">
-        Upload Dealer Sheet
-        <input type="file" accept=".xlsx,.xls,.xlsm" onchange="uploadFile(this)" />
-      </label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label class="upload-label">
+          Upload Dealer Sheet
+          <input type="file" accept=".xlsx,.xls,.xlsm" onchange="uploadFile(this)" />
+        </label>
+        <button class="btn-reset" onclick="resetData()" title="Clear all deals and inventory for current entity/metal and re-import">
+          Reset Data
+        </button>
+      </div>
     </div>
 
     <!-- ── DATE FILTER TOOLBAR ── -->
