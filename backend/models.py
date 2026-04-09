@@ -7,7 +7,10 @@ import sqlite3
 import os
 from datetime import date
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'treasury.db')
+# Store DB in local AppData to avoid OneDrive sync conflicts with SQLite file locking
+_LOCAL_DATA = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'TreasuryBrain')
+os.makedirs(_LOCAL_DATA, exist_ok=True)
+DB_PATH = os.path.join(_LOCAL_DATA, 'treasury.db')
 
 
 def get_conn():
