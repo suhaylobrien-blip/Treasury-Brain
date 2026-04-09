@@ -94,11 +94,11 @@ def _classify_rgb(rgb6: str) -> str:
     """
     Classify a 6-char hex colour (RRGGBB) into deal status.
 
-    Orange → 'confirmed'  (standard confirmed bullion/coin deal)
-    Yellow → 'quote'      (pipeline — not yet confirmed)
-    Blue   → 'proof'      (proof coin deal — track separately)
-    White / empty → ''    (no colour → skip / header row)
-    Other  → 'confirmed'  (any other colour = treat as confirmed)
+    Key distinction — orange vs goldish-yellow:
+      Orange (confirmed):      high R, G < 200, B very low  → e.g. FFC000 (G=192), FF9900
+      Goldish-yellow (quote):  high R, G ≥ 200, B low       → e.g. FFD700 (G=215), FFFF00
+      Blue (proof):            dominant B channel             → e.g. any Excel blue fill
+      White / empty → '' (skip — header / blank row)
     """
     if not rgb6 or len(rgb6) < 6:
         return ''
@@ -120,16 +120,43 @@ def _classify_rgb(rgb6: str) -> str:
     if b > 130 and b > r + 40:
         return 'proof'
 
-    # Yellow: high R + high G, low B  (quote / pipeline)
-    if r > 180 and g > 180 and b < 100:
-        return 'quote'
-
-    # Orange: high R, mid G, low B  (confirmed bullion)
-    if r > 180 and 60 <= g <= 200 and b < 80:
+    # Orange (confirmed): high R, G clearly below 200, B very low
+    # FFC000 → R=255, G=192, B=0  ← most common Excel "gold/orange" = confirmed deal
+    # FF9900 → R=255, G=153, B=0  ← strong orange = confirmed
+    if r > 180 and g < 200 and b < 80:
         return 'confirmed'
+
+    # Goldish-yellow (quote/pipeline): both R and G high (≥200), B low
+    # FFD700 → R=255, G=215, B=0  ← gold = pipeline
+    # FFCC00 → R=255, G=204, B=0  ← golden yellow = pipeline
+    # FFFF00 → R=255, G=255, B=0  ← pure yellow = pipeline
+    if r > 200 and g >= 200 and b < 130:
+        return 'quote'
 
     # Anything else → treat as confirmed
     return 'confirmed'
+
+
+def _log_distinct_rgbs(workbook_path: str, sheet_name: str):
+    """Print unique RGB hex values seen in the sheet — helps diagnose colour misclassification."""
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(workbook_path, data_only=True)
+        ws = wb[sheet_name]
+        seen = set()
+        for row in ws.iter_rows():
+            for cell in row:
+                rgb = _get_cell_rgb(cell)
+                if rgb and rgb not in seen:
+                    r = int(rgb[0:2], 16)
+                    g = int(rgb[2:4], 16)
+                    b = int(rgb[4:6], 16)
+                    label = _classify_rgb(rgb)
+                    seen.add(rgb)
+                    print(f"      RGB #{rgb} (R={r},G={g},B={b}) → {label or 'skip'}")
+        wb.close()
+    except Exception:
+        pass
 
 
 def _read_row_statuses(workbook_path: str, sheet_name: str) -> dict:
@@ -500,6 +527,9 @@ def _process_sabis_file(filepath: str, filename: str,
         for s in row_statuses.values():
             colour_counts[s or 'none'] = colour_counts.get(s or 'none', 0) + 1
         print(f"    Row colours: {colour_counts}")
+
+        # Debug: show distinct RGB values found so mis-classification can be diagnosed
+        _log_distinct_rgbs(src, tab)
 
         try:
             df = pd.read_excel(src, sheet_name=tab, dtype=str, header=0,

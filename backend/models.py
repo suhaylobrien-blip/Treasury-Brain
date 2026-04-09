@@ -252,13 +252,15 @@ def reset_entity_data(entity: str, metal: str):
     with corrected calculations.
     """
     conn = get_conn()
+    conn.execute("PRAGMA foreign_keys = OFF")
     c    = conn.cursor()
+    c.execute("DELETE FROM cash_flows       WHERE entity=?",             (entity,))
+    c.execute("DELETE FROM inventory_ageing WHERE entity=? AND metal=?", (entity, metal))
     c.execute("DELETE FROM deals            WHERE entity=? AND metal=?", (entity, metal))
     c.execute("DELETE FROM pipeline         WHERE entity=? AND metal=?", (entity, metal))
     c.execute("DELETE FROM inventory        WHERE entity=? AND metal=?", (entity, metal))
-    c.execute("DELETE FROM inventory_ageing WHERE entity=? AND metal=?", (entity, metal))
-    c.execute("DELETE FROM cash_flows       WHERE entity=?",             (entity,))
     conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.close()
 
 
