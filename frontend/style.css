@@ -493,6 +493,19 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
   grid-template-columns: 1fr 1fr 1fr;
   gap: 12px;
 }
+.charts-row .card,
+.secondary-grid .card:not(.preview-panel) {
+  padding: 12px 14px 10px;
+}
+.charts-row .card h2,
+.secondary-grid .card h2 {
+  margin-bottom: 8px;
+}
+.charts-row canvas,
+.secondary-grid canvas {
+  max-height: 100px;
+  display: block;
+}
 
 /* ── CHART EMPTY STATE ──────────────────────────────────────────────────── */
 .chart-empty {

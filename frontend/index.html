@@ -40,11 +40,12 @@
   ═══════════════════════════════════════════ -->
   <div class="filter-toolbar standalone">
     <div class="filter-pills">
-      <button class="pill active" onclick="setFilter('all',   this)">All</button>
-      <button class="pill"        onclick="setFilter('today', this)">Today</button>
-      <button class="pill"        onclick="setFilter('week',  this)">This Week</button>
-      <button class="pill"        onclick="setFilter('month', this)">This Month</button>
-      <button class="pill"        onclick="setFilter('year',  this)">This Year</button>
+      <button class="pill active" onclick="setFilter('all',       this)">All</button>
+      <button class="pill"        onclick="setFilter('today',     this)">Today</button>
+      <button class="pill"        onclick="setFilter('yesterday', this)">Yesterday</button>
+      <button class="pill"        onclick="setFilter('week',      this)">This Week</button>
+      <button class="pill"        onclick="setFilter('month',     this)">This Month</button>
+      <button class="pill"        onclick="setFilter('year',      this)">This Year</button>
     </div>
     <div class="filter-custom">
       <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
@@ -263,17 +264,17 @@
 
     <section class="card">
       <h2>Deal Volume by Day (oz)</h2>
-      <canvas id="volume-chart" height="160"></canvas>
+      <canvas id="volume-chart" height="80"></canvas>
     </section>
 
     <section class="card">
       <h2>VWAP Trend — Buy vs Sell</h2>
-      <canvas id="vwap-chart" height="160"></canvas>
+      <canvas id="vwap-chart" height="80"></canvas>
     </section>
 
     <section class="card">
       <h2>Daily GP Contribution (ZAR)</h2>
-      <canvas id="gp-chart" height="160"></canvas>
+      <canvas id="gp-chart" height="80"></canvas>
     </section>
 
   </div>
@@ -285,12 +286,12 @@
 
     <section class="card">
       <h2>GP by Silo</h2>
-      <canvas id="silo-chart" height="190"></canvas>
+      <canvas id="silo-chart" height="100"></canvas>
     </section>
 
     <section class="card">
       <h2>GP by Channel</h2>
-      <canvas id="channel-chart" height="190"></canvas>
+      <canvas id="channel-chart" height="100"></canvas>
     </section>
 
     <section class="card preview-panel">

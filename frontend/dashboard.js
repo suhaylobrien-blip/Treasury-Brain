@@ -61,6 +61,10 @@ function setFilter(mode, btn) {
 
   if (mode === 'today') {
     filterFrom = filterTo = ymd(today);
+  } else if (mode === 'yesterday') {
+    const yest = new Date(today);
+    yest.setDate(today.getDate() - 1);
+    filterFrom = filterTo = ymd(yest);
   } else if (mode === 'week') {
     const mon = new Date(today);
     mon.setDate(today.getDate() - today.getDay() + 1);
@@ -85,11 +89,12 @@ function setFilter(mode, btn) {
 
   const lbl = document.getElementById('filter-label');
   if (lbl) {
-    if      (mode === 'all')    lbl.textContent = 'Showing all deals';
-    else if (mode === 'today')  lbl.textContent = 'Today';
-    else if (mode === 'week')   lbl.textContent = 'This week';
-    else if (mode === 'month')  lbl.textContent = 'This month';
-    else if (mode === 'year')   lbl.textContent = 'This year';
+    if      (mode === 'all')       lbl.textContent = 'Showing all deals';
+    else if (mode === 'today')     lbl.textContent = 'Today';
+    else if (mode === 'yesterday') lbl.textContent = 'Yesterday';
+    else if (mode === 'week')      lbl.textContent = 'This week';
+    else if (mode === 'month')     lbl.textContent = 'This month';
+    else if (mode === 'year')      lbl.textContent = 'This year';
     else if (filterFrom && filterTo) lbl.textContent = `${filterFrom} → ${filterTo}`;
     else lbl.textContent = '';
   }
