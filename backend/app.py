@@ -362,13 +362,14 @@ def upload_file():
 
     # Use a unique temp filename (UUID prefix) so a previously locked copy of
     # the same filename never blocks this upload on Windows.
-    ext       = os.path.splitext(f.filename)[1]
-    tmp_name  = f"{uuid.uuid4().hex}{ext}"
-    save_path = os.path.join(tempfile.gettempdir(), tmp_name)
+    original_name = f.filename
+    ext           = os.path.splitext(original_name)[1]
+    tmp_name      = f"{uuid.uuid4().hex}{ext}"
+    save_path     = os.path.join(tempfile.gettempdir(), tmp_name)
     f.save(save_path)
 
     try:
-        result = process_file(save_path)
+        result = process_file(save_path, display_name=original_name)
     finally:
         # Clean up the unique temp file whether processing succeeded or not
         try:

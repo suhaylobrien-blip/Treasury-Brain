@@ -395,30 +395,46 @@ def _get_sheet_names(filepath: str) -> list:
         return names
 
 
-def process_file(filepath: str, entity: str = 'SABIS') -> dict:
+def process_file(filepath: str, entity: str = 'SABIS',
+                 display_name: str = None) -> dict:
     """
     Main entry point. Reads, validates, and processes a dealer Excel file.
     Auto-detects SABIS dealing sheet format vs generic format.
     Returns summary of what was imported.
+
+    display_name: the original user-facing filename (used when filepath is a
+                  UUID temp path created by the upload endpoint).
     """
     import tempfile, warnings
     warnings.filterwarnings('ignore', category=UserWarning)
 
-    filename = os.path.basename(filepath)
+    filename = display_name or os.path.basename(filepath)
     print(f"\nProcessing: {filename}")
 
-    # Copy to local temp to avoid OneDrive/network sync locks during processing
-    tmp_path = os.path.join(tempfile.gettempdir(), filename)
-    try:
-        shutil.copy2(filepath, tmp_path)
-    except Exception as e:
-        _move_to_errors(filepath, f"Could not read file: {e}")
-        return {'status': 'error', 'file': filename, 'error': str(e)}
+    # Only copy to temp if the file is NOT already in the temp directory.
+    # When called from the upload endpoint the file is already a UUID temp
+    # copy — copying it again to the same path causes a Windows sharing error.
+    src_abs  = os.path.abspath(filepath)
+    tmp_dir  = os.path.abspath(tempfile.gettempdir())
+    in_temp  = os.path.dirname(src_abs) == tmp_dir
+
+    if in_temp:
+        # Already a local temp file — use it directly, no copy needed.
+        tmp_path = filepath
+    else:
+        # File is on OneDrive / network — copy to local temp first.
+        tmp_path = os.path.join(tempfile.gettempdir(), os.path.basename(filepath))
+        try:
+            shutil.copy2(filepath, tmp_path)
+        except Exception as e:
+            _move_to_errors(filepath, f"Could not read file: {e}")
+            return {'status': 'error', 'file': filename, 'error': str(e)}
 
     try:
         sheet_names = _get_sheet_names(tmp_path)
     except Exception as e:
-        _move_to_errors(filepath, str(e))
+        if not in_temp:
+            _move_to_errors(filepath, str(e))
         return {'status': 'error', 'file': filename, 'error': str(e)}
 
     # Detect SABIS dealing sheet by checking tab names
