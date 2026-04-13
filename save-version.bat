@@ -28,6 +28,10 @@ SET ROOT=%~dp0
 REM Strip trailing backslash from ROOT
 if "%ROOT:~-1%"=="\" SET ROOT=%ROOT:~0,-1%
 
+REM ── Sanitise description: replace & with "and" so folder names are
+REM    safe to double-click in Windows Explorer (& breaks cmd.exe parsing)
+SET DESCRIPTION=!DESCRIPTION:&=and!
+
 REM ── Build folder name ────────────────────────────────────────────
 if "%DESCRIPTION%"=="" (
     SET FOLDER_NAME=v%VERSION%
