@@ -120,6 +120,7 @@ for %%F in ("%ROOT%\config\*.*") do (
 )
 
 copy "%ROOT%\requirements.txt" "%SNAPSHOT_DIR%\" >nul
+copy "%ROOT%\start.bat"       "%SNAPSHOT_DIR%\" >nul
 
 REM ── Create CHANGES.md ────────────────────────────────────────────
 echo  [3/6] Creating CHANGES.md...
