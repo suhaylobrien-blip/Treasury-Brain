@@ -1,0 +1,100 @@
+{
+  "_note": "Product reference from Tables & Data sheet — A1:C68, I1:K11. UOM = troy oz per unit.",
+
+  "gold": [
+    {"name": "1oz Gold Krugerrand",          "code": "KR1",      "oz": 1.0,        "vat": false},
+    {"name": "1/2oz Gold Krugerrand",         "code": "KR2",      "oz": 0.5,        "vat": false},
+    {"name": "1/4oz Gold Krugerrand",         "code": "KR4",      "oz": 0.25,       "vat": false},
+    {"name": "1/10oz Gold Krugerrand",        "code": "KR10",     "oz": 0.1,        "vat": false},
+    {"name": "1oz Gold Proof Krugerrand",     "code": "PKR1",     "oz": 1.0,        "vat": false},
+    {"name": "1/2oz Gold Proof Krugerrand",   "code": "PKR2",     "oz": 0.5,        "vat": false},
+    {"name": "1/4oz Gold Proof Krugerrand",   "code": "PKR4",     "oz": 0.25,       "vat": false},
+    {"name": "1/10oz Gold Proof Krugerrand",  "code": "PKR10",    "oz": 0.1,        "vat": false},
+    {"name": "10g Gold Minted Bar (RRL)",     "code": "GM10",     "oz": 0.322,      "vat": true},
+    {"name": "50g Gold Minted Bar (RRL)",     "code": "GM50",     "oz": 1.608,      "vat": true},
+    {"name": "100g Gold Minted Bar (RRL)",    "code": "GM100",    "oz": 3.215,      "vat": true},
+    {"name": "10g Gold Minted Bar (MetCon)",  "code": "GM10MC",   "oz": 0.322,      "vat": true},
+    {"name": "50g Gold Minted Bar (MetCon)",  "code": "GM50MC",   "oz": 1.608,      "vat": true},
+    {"name": "100g Gold Minted Bar (MetCon)", "code": "GM100MC",  "oz": 3.215,      "vat": true},
+    {"name": "Gold Dinar",                    "code": "Gdin",     "oz": 0.132,      "vat": false},
+    {"name": "Maple Gram",                    "code": "1GCM2025", "oz": 0.0321507,  "vat": true},
+    {"name": "1oz Platinum Bar",              "code": "PB1",      "oz": 1.0,        "vat": true}
+  ],
+
+  "silver": [
+    {"name": "2024 Year of the Dragon 1/2oz Silver Bullion Coloured Coins", "code": "0.5oz YOTD Silver Bullion Coin", "oz": 0.5,    "vat": true},
+    {"name": "2025 Year of the Snake 1/2oz Silver Bullion Coins",           "code": "0.5oz YOTS Silver Bullion Coin", "oz": 0.5,    "vat": true},
+    {"name": "2025 Year of the Snake 1/2oz Silver Proof Coins",             "code": "0.5oz YOTS Silver Proof Coin",   "oz": 0.5,    "vat": true},
+    {"name": "1oz Silver Bitcoin",                                           "code": "1BTC",                           "oz": 1.0,    "vat": true},
+    {"name": "2024 Year of the Dragon 1oz Silver Bullion Coloured Coins",   "code": "1oz YOTD Silver Bullion Coin",   "oz": 1.0,    "vat": true},
+    {"name": "2025 Year of the Snake 1oz Silver Bullion Coins",             "code": "1oz YOTS Silver Bullion Coin",   "oz": 1.0,    "vat": true},
+    {"name": "2025 Year of the Snake 1oz Silver Proof Coins",               "code": "1oz YOTS Silver Proof Coins",    "oz": 1.0,    "vat": true},
+    {"name": "2oz Australia Crocodile",                                      "code": "2oz AusCroc",                    "oz": 2.0,    "vat": true},
+    {"name": "2oz Australia Koala",                                          "code": "2oz AusKoa",                     "oz": 2.0,    "vat": true},
+    {"name": "2oz Red Dragon of Wales",                                      "code": "2oz RedDragon",                  "oz": 2.0,    "vat": true},
+    {"name": "2024 Year of the Dragon 2oz Silver Bullion Coloured Coins",   "code": "2oz YOTD Silver Bullion Coin",   "oz": 2.0,    "vat": true},
+    {"name": "1oz Armenian Silver Noah's Ark",                               "code": "ASNA",                           "oz": 1.0,    "vat": true},
+    {"name": "10oz Aztec Calendar Silver Bar",                               "code": "Aztec 10oz",                     "oz": 10.0,   "vat": true},
+    {"name": "1oz Silver Bar Aztec Calendar",                                "code": "Aztec 1oz",                      "oz": 1.0,    "vat": true},
+    {"name": "SA Bullion 1kg Silver Bar",                                    "code": "SABIS1KG",                       "oz": 32.151, "vat": true},
+    {"name": "1oz Silver Aztec Calender",                                    "code": "SAC",                            "oz": 1.0,    "vat": true},
+    {"name": "1kg Silver Bar",                                               "code": "SB1000",                         "oz": 32.151, "vat": true},
+    {"name": "15kg Silver Bullion Cast Bar",                                 "code": "SB15000",                        "oz": 482.25, "vat": true},
+    {"name": "500g Silver Bar",                                              "code": "SB500",                          "oz": 16.075, "vat": true},
+    {"name": "1oz Silver Bullion American Eagle",                            "code": "SCAE1",                          "oz": 1.0,    "vat": true},
+    {"name": "Austrian Silver Philharmonic",                                 "code": "SCAPhil",                        "oz": 1.0,    "vat": true},
+    {"name": "1oz Silver Britannia Coin",                                    "code": "SCBrit",                         "oz": 1.0,    "vat": true},
+    {"name": "1/10oz Silver Britannia Coin",                                 "code": "SCBrit0.10oz",                   "oz": 0.1,    "vat": true},
+    {"name": "1/4oz Silver Britannia",                                       "code": "SCBrit0.25oz",                   "oz": 0.25,   "vat": true},
+    {"name": "1oz Silver Britannia Liberty Coin",                            "code": "SCBritLib",                      "oz": 1.0,    "vat": true},
+    {"name": "1oz Silver Bullion Canadian Maple Leaves",                     "code": "SCCML1",                         "oz": 1.0,    "vat": true},
+    {"name": "100oz Canadian Maple Leave Bar",                               "code": "SCCMPL100",                      "oz": 100.0,  "vat": true},
+    {"name": "2oz Silver Krugerrand",                                        "code": "2SKR",                           "oz": 2.0,    "vat": true},
+    {"name": "1oz Australian Silver Koala",                                  "code": "SK1",                            "oz": 1.0,    "vat": true},
+    {"name": "1kg Australian Silver Koala",                                  "code": "SK1KG",                          "oz": 32.151, "vat": true},
+    {"name": "1oz Australian Silver Kangaroo",                               "code": "SKA",                            "oz": 1.0,    "vat": true},
+    {"name": "1kg Australian Silver Kookaburra",                             "code": "SKB1KG",                         "oz": 32.151, "vat": true},
+    {"name": "1oz Australian Silver Kookaburra",                             "code": "SKK",                            "oz": 1.0,    "vat": true},
+    {"name": "1oz Silver Krugerrand",                                        "code": "SKR1",                           "oz": 1.0,    "vat": true},
+    {"name": "Silver Monsterbox 500oz",                                      "code": "SKR500",                         "oz": 500.0,  "vat": true},
+    {"name": "1oz Silver Minted Bar (RRL)",                                  "code": "SM1",                            "oz": 1.0,    "vat": true},
+    {"name": "100g Silver Minted Bar",                                       "code": "SM100",                          "oz": 3.215,  "vat": true},
+    {"name": "1oz Silver Minted Bar (MetCon)",                               "code": "SMC1",                           "oz": 1.0,    "vat": true},
+    {"name": "Silver Ubuntu 1oz Coin",                                       "code": "SU1OZCT",                        "oz": 1.0,    "vat": true},
+    {"name": "Star Wars Jedi 1oz Silver Minted Bars",                        "code": "SW-SM1",                         "oz": 1.0,    "vat": true},
+    {"name": "Star Wars Sith 10oz Silver Minted Bars",                       "code": "SW-SM10",                        "oz": 10.0,   "vat": true},
+    {"name": "Star Wars Sith 1oz Silver Minted Bars",                        "code": "SW-SM1oz",                       "oz": 1.0,    "vat": true},
+    {"name": "2026 Year of the Horse 1oz Silver Bullion Coloured Coin",      "code": "YOTH Bullion",                   "oz": 1.0,    "vat": true},
+    {"name": "1oz Silver Mexican Libertad",                                  "code": "SCMexLib1",                      "oz": 1.0,    "vat": true}
+  ],
+
+  "source_channels": {
+    "MT":                    {"channel": "dealer",  "is_digital": false},
+    "Nate":                  {"channel": "dealer",  "is_digital": false},
+    "Grant":                 {"channel": "dealer",  "is_digital": false},
+    "Custody":               {"channel": "dealer",  "is_digital": false},
+    "Goldstore":             {"channel": "digital", "is_digital": true},
+    "Treasury":              {"channel": "dealer",  "is_digital": false},
+    "Goldstore Lead - MT":   {"channel": "digital", "is_digital": true},
+    "Goldstore Lead - Nate": {"channel": "digital", "is_digital": true},
+    "Goldstore Lead - Grant":{"channel": "digital", "is_digital": true},
+    "Walk in client":        {"channel": "dealer",  "is_digital": false}
+  },
+
+  "margin_calc": {
+    "_note": "Two interchangeable margin formulas from Tables & Data E19:L32",
+    "simple": {
+      "description": "Fixed price (KRs) — no VAT",
+      "forward":  "price = spot × (1 + margin/100)",
+      "backward_margin": "margin = (price/spot - 1) × 100",
+      "backward_spot":   "spot = price / (1 + margin/100)"
+    },
+    "vat_inclusive": {
+      "description": "Minted bars / silver — 15% VAT inclusive",
+      "vat_rate": 0.15,
+      "forward":  "price_vat_incl = spot × oz_per_unit × (1 + margin/100) × 1.15",
+      "backward_margin": "margin = ((price_vat_incl/1.15) / (spot × oz_per_unit) - 1) × 100",
+      "backward_spot":   "spot = (price_vat_incl/1.15) / (oz_per_unit × (1 + margin/100))"
+    }
+  }
+}
