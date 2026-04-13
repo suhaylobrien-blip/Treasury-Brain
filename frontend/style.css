@@ -257,6 +257,8 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 .buy-header   { background: rgba(64,181,173,0.08);  border-bottom-color: rgba(64,181,173,0.2); }
 .sell-header  { background: rgba(212,167,85,0.08);  border-bottom-color: rgba(212,167,85,0.2); }
 .hedge-header { background: rgba(123,79,201,0.10);  border-bottom-color: rgba(123,79,201,0.25); }
+.long-header  { background: rgba(64,181,173,0.08);  border-bottom-color: rgba(64,181,173,0.2); }
+.short-header { background: rgba(224,82,82,0.08);   border-bottom-color: rgba(224,82,82,0.2); }
 
 .tc-title {
   font-family: var(--font-head);
@@ -266,9 +268,11 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
   letter-spacing: .8px;
   color: var(--text);
 }
-.buy-header  .tc-title { color: var(--green); }
-.sell-header .tc-title { color: var(--gold); }
-.hedge-header .tc-title { color: var(--purple-lt); }
+.buy-header  .tc-title   { color: var(--green); }
+.sell-header .tc-title   { color: var(--gold); }
+.hedge-header .tc-title  { color: var(--purple-lt); }
+.long-header  .tc-title  { color: var(--green); }
+.short-header .tc-title  { color: #E05252; }
 
 .tc-badge {
   font-size: 11px;

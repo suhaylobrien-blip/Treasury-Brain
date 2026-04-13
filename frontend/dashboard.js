@@ -141,6 +141,7 @@ async function loadAll() {
   renderCombinedGP(deals, otherDeals);
   renderTrading(deals);
   renderHedging(hedging, inv);
+  renderLongsShorts(hedging);
   renderCombinedExposure(exposure);
   renderPipelineTable(pipeline, inv, hedging);
   renderDealsTable(deals);
@@ -313,6 +314,69 @@ function renderHedging(hedging, inv) {
       <button class="btn-hedge-remove" onclick="removeHedgePosition(${p.id})" title="Remove">×</button>
     `;
     list.appendChild(div);
+  });
+}
+
+// ─── TREASURY POSITIONS TABLE (Longs / Shorts) ───────────────────────────────
+
+function renderLongsShorts(hedging) {
+  const positions = (hedging && hedging.positions) || [];
+  const longs  = positions.filter(p => p.position_type === 'long');
+  const shorts = positions.filter(p => p.position_type === 'short');
+
+  // Card totals
+  const longOz   = longs.reduce((s, p)  => s + (p.contract_oz || 0), 0);
+  const shortOz  = shorts.reduce((s, p) => s + (p.contract_oz || 0), 0);
+  const longVal  = longs.reduce((s, p)  => s + (p.open_price_zar || 0) * (p.contract_oz || 0), 0);
+  const shortVal = shorts.reduce((s, p) => s + (p.open_price_zar || 0) * (p.contract_oz || 0), 0);
+  const longVwap  = longOz  > 0 ? longVal  / longOz  : 0;
+  const shortVwap = shortOz > 0 ? shortVal / shortOz : 0;
+
+  set('ht-long-count',  longs.length  + ' position' + (longs.length  !== 1 ? 's' : ''));
+  set('ht-short-count', shorts.length + ' position' + (shorts.length !== 1 ? 's' : ''));
+  set('ht-long-vwap',   longVwap  > 0 ? formatCurrency(longVwap)  : '–');
+  set('ht-short-vwap',  shortVwap > 0 ? formatCurrency(shortVwap) : '–');
+  set('ht-long-oz',     fmt(longOz,  2) + ' oz');
+  set('ht-short-oz',    fmt(shortOz, 2) + ' oz');
+  set('ht-long-val',    formatCurrency(longVal));
+  set('ht-short-val',   formatCurrency(shortVal));
+
+  const lbl = document.getElementById('hedge-table-count');
+  if (lbl) lbl.textContent = positions.length ? `(${positions.length})` : '';
+
+  // Detail table
+  const tbody = document.getElementById('hedge-table-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!positions.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No positions — add via the Hedging card above</td></tr>';
+    return;
+  }
+
+  // Sort: longs first, then shorts; within each group by date desc
+  const sorted = [...positions].sort((a, b) => {
+    if (a.position_type !== b.position_type)
+      return a.position_type === 'long' ? -1 : 1;
+    return (b.open_date || '').localeCompare(a.open_date || '');
+  });
+
+  sorted.forEach(p => {
+    const isLong   = p.position_type === 'long';
+    const totalVal = (p.open_price_zar || 0) * (p.contract_oz || 0);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.open_date || '–'}</td>
+      <td style="font-weight:600">${p.platform || '–'}</td>
+      <td class="${isLong ? 'buy' : 'sell'}" style="font-weight:700">
+        ${isLong ? 'Long' : 'Short'}
+      </td>
+      <td>${fmt(p.contract_oz, 2)} oz</td>
+      <td>${formatCurrency(p.open_price_zar)}</td>
+      <td style="font-weight:600">${formatCurrency(totalVal)}</td>
+      <td style="color:var(--muted)">${p.notes || '–'}</td>
+    `;
+    tbody.appendChild(tr);
   });
 }
 

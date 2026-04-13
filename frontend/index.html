@@ -239,6 +239,84 @@
   </div>
 
   <!-- ═══════════════════════════════════════════
+       TREASURY POSITIONS (Longs / Shorts)
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width treasury-positions-card">
+    <div class="card-header">
+      <h2>Treasury Positions <span id="hedge-table-count" class="count-label"></span></h2>
+    </div>
+
+    <!-- Long / Short summary cards — same style as Buybacks / Sales -->
+    <div class="trading-grid" style="margin-bottom:24px">
+
+      <section class="card trading-card">
+        <div class="tc-header long-header">
+          <span class="tc-title">Longs</span>
+          <span class="tc-badge" id="ht-long-count">0 positions</span>
+        </div>
+        <div class="tc-vwap-row">
+          <div>
+            <div class="tc-vwap-label">VWAP</div>
+            <div class="tc-vwap-val" id="ht-long-vwap">–</div>
+          </div>
+        </div>
+        <div class="tc-stats">
+          <div class="tc-stat">
+            <span class="tc-stat-label">Volume</span>
+            <span class="tc-stat-val" id="ht-long-oz">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Total Value</span>
+            <span class="tc-stat-val" id="ht-long-val">–</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card trading-card">
+        <div class="tc-header short-header">
+          <span class="tc-title">Shorts</span>
+          <span class="tc-badge" id="ht-short-count">0 positions</span>
+        </div>
+        <div class="tc-vwap-row">
+          <div>
+            <div class="tc-vwap-label">VWAP</div>
+            <div class="tc-vwap-val" id="ht-short-vwap">–</div>
+          </div>
+        </div>
+        <div class="tc-stats">
+          <div class="tc-stat">
+            <span class="tc-stat-label">Volume</span>
+            <span class="tc-stat-val" id="ht-short-oz">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Total Value</span>
+            <span class="tc-stat-val" id="ht-short-val">–</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Positions detail table -->
+    <div class="table-wrap">
+      <table id="hedge-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Platform</th>
+            <th>Type</th>
+            <th>Oz</th>
+            <th>Open Price (ZAR/oz)</th>
+            <th>Total Value</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="hedge-table-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
        COMBINED EXPOSURE + TREASURY ALPHA
   ═══════════════════════════════════════════ -->
   <section class="card full-width combined-exposure-card">
