@@ -9,3 +9,7 @@ reports/*
 config/credentials.json
 .env
 *.egg-info/
+.claude/
+skills/
+*.pdf
+*.xlsx

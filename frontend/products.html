@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Products — SA Bullion</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Products page-specific styles ─────────────────────────────────── */
+    .products-layout {
+      display: flex;
+      gap: 0;
+      min-height: calc(100vh - 57px);
+    }
+
+    /* ── Sidebar filters ────────────────────────────────────────────────── */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      position: sticky;
+      top: 57px;
+      height: calc(100vh - 57px);
+      overflow-y: auto;
+    }
+
+    .sidebar h3 {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .filter-group { margin-bottom: 28px; }
+
+    .filter-group button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      font-family: var(--font-body);
+    }
+
+    .filter-group button:hover { background: var(--raised); color: var(--text); }
+    .filter-group button.active { background: var(--raised); color: var(--gold); font-weight: 600; }
+
+    .sidebar-stat {
+      font-size: 11px;
+      color: var(--muted);
+      padding: 6px 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .sidebar-stat span { color: var(--text); font-weight: 500; }
+
+    .search-wrap {
+      margin-bottom: 20px;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 13px;
+      padding: 8px 12px;
+      font-family: var(--font-body);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .search-wrap input:focus { border-color: var(--purple); }
+    .search-wrap input::placeholder { color: var(--muted2); }
+
+    /* ── Product list ───────────────────────────────────────────────────── */
+    .products-main {
+      flex: 1;
+      padding: 24px 28px;
+      overflow-y: auto;
+    }
+
+    .products-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .products-header h2 {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .products-count {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .product-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .product-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: 40px 1fr auto auto auto;
+      align-items: center;
+      gap: 16px;
+      transition: border-color 0.15s, background 0.15s;
+      cursor: default;
+    }
+
+    .product-row:hover {
+      border-color: var(--border-strong);
+      background: var(--raised);
+    }
+
+    .product-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .product-icon.gold   { background: rgba(212,167,85,0.12); }
+    .product-icon.silver { background: rgba(160,126,214,0.12); }
+    .product-icon.watch  { background: rgba(64,181,173,0.12); }
+
+    .product-info {}
+    .product-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .product-meta {
+      margin-top: 3px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .product-sku {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: monospace;
+    }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .badge-gold   { background: rgba(212,167,85,0.15); color: var(--gold); }
+    .badge-silver { background: rgba(160,126,214,0.15); color: var(--purple-lt); }
+    .badge-watch  { background: rgba(64,181,173,0.12); color: var(--green); }
+    .badge-cat    { background: rgba(240,238,248,0.07); color: var(--muted); }
+    .badge-novat  { background: rgba(64,181,173,0.10); color: var(--green); }
+    .badge-vat    { background: rgba(240,238,248,0.07); color: var(--muted); }
+
+    .product-price {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .price-label { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+    .price-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+      font-family: var(--font-head);
+      white-space: nowrap;
+    }
+
+    .buyback-value {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .product-stock {
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .stock-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-bottom: 2px;
+    }
+
+    .stock-dot.in  { background: var(--green); box-shadow: 0 0 6px rgba(64,181,173,0.5); }
+    .stock-dot.out { background: var(--red); }
+
+    .stock-qty {
+      font-size: 11px;
+      color: var(--muted);
+      display: block;
+    }
+
+    /* ── Loading / empty states ─────────────────────────────────────────── */
+    .state-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .state-msg .spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--border);
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 14px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      background: rgba(224,82,82,0.08);
+      border: 1px solid rgba(224,82,82,0.25);
+      border-radius: var(--radius);
+      color: var(--red);
+      padding: 16px 20px;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    /* ── Header back link ───────────────────────────────────────────────── */
+    .back-link {
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.15s;
+    }
+
+    .back-link:hover { color: var(--text); }
+
+    /* ── Ticker pill ────────────────────────────────────────────────────── */
+    .ticker-up   { color: var(--green); font-size: 11px; }
+    .ticker-down { color: var(--red);   font-size: 11px; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <a href="/" class="back-link">← Dashboard</a>
+    <div class="logo">Products<span>SA Bullion</span></div>
+  </div>
+  <div class="header-meta">
+    <span id="live-clock"></span>
+    <button class="btn-refresh" onclick="loadProducts()">↻ Refresh</button>
+  </div>
+</header>
+
+<!-- ── LAYOUT ── -->
+<div class="products-layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <div class="search-wrap">
+      <input type="text" id="search-input" placeholder="Search products…" oninput="applyFilters()" />
+    </div>
+
+    <div class="filter-group">
+      <h3>Metal</h3>
+      <button class="active" onclick="setFilter('metal','all',  this)">All Metals</button>
+      <button              onclick="setFilter('metal','Gold',   this)">Gold</button>
+      <button              onclick="setFilter('metal','Silver', this)">Silver</button>
+    </div>
+
+    <div class="filter-group">
+      <h3>Category</h3>
+      <button class="active" onclick="setFilter('cat','all',          this)">All Categories</button>
+      <button              onclick="setFilter('cat','Coins',          this)">Coins</button>
+      <button              onclick="setFilter('cat','Minted Bars',    this)">Minted Bars</button>
+      <button              onclick="setFilter('cat','Watches',        this)">Watches</button>
+    </div>
+
+    <div class="filter-group">
+      <h3>Stock</h3>
+      <button class="active" onclick="setFilter('stock','all',    this)">All</button>
+      <button              onclick="setFilter('stock','instock',  this)">In Stock</button>
+      <button              onclick="setFilter('stock','outstock', this)">Out of Stock</button>
+    </div>
+
+    <div class="filter-group">
+      <h3>Overview</h3>
+      <div class="sidebar-stat">Products <span id="stat-total">–</span></div>
+      <div class="sidebar-stat">In Stock <span id="stat-instock">–</span></div>
+      <div class="sidebar-stat">Gold <span id="stat-gold">–</span></div>
+      <div class="sidebar-stat">Silver <span id="stat-silver">–</span></div>
+    </div>
+
+  </aside>
+
+  <!-- Main -->
+  <div class="products-main">
+    <div class="products-header">
+      <h2>Product Catalogue</h2>
+      <span class="products-count" id="products-count"></span>
+    </div>
+    <div class="product-list" id="product-list">
+      <div class="state-msg">
+        <div class="spinner"></div>
+        Loading products…
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── State ───────────────────────────────────────────────────────────────
+  let allProducts = [];
+  const filters = { metal: 'all', cat: 'all', stock: 'all' };
+
+  // ── Clock ────────────────────────────────────────────────────────────────
+  function tickClock() {
+    const el = document.getElementById('live-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('en-ZA', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // ── Fetch all pages ──────────────────────────────────────────────────────
+  async function loadProducts() {
+    const list = document.getElementById('product-list');
+    list.innerHTML = '<div class="state-msg"><div class="spinner"></div>Loading products…</div>';
+
+    try {
+      // Fetch page 1 first to get totalPage
+      const first = await fetch('/api/goldstore/products?page=1').then(r => r.json());
+      const totalPages = first._pagination?.totalPage || 1;
+
+      // Fetch remaining pages in parallel
+      const rest = totalPages > 1
+        ? await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) =>
+              fetch(`/api/goldstore/products?page=${i + 2}`).then(r => r.json())
+            )
+          )
+        : [];
+
+      allProducts = [
+        ...(first.data || []),
+        ...rest.flatMap(r => r.data || [])
+      ];
+
+      updateStats();
+      applyFilters();
+    } catch (err) {
+      list.innerHTML = `<div class="error-msg">Failed to load products — ${err.message}</div>`;
+    }
+  }
+
+  // ── Sidebar stats ────────────────────────────────────────────────────────
+  function updateStats() {
+    document.getElementById('stat-total').textContent   = allProducts.length;
+    document.getElementById('stat-instock').textContent = allProducts.filter(p => p.stocks?.inStock).length;
+    document.getElementById('stat-gold').textContent    = allProducts.filter(p => p.prices?.metalType?.name === 'Gold').length;
+    document.getElementById('stat-silver').textContent  = allProducts.filter(p => p.prices?.metalType?.name === 'Silver').length;
+  }
+
+  // ── Filter logic ─────────────────────────────────────────────────────────
+  function setFilter(type, value, btn) {
+    filters[type] = value;
+    // Update active button in group
+    btn.closest('.filter-group').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const query = document.getElementById('search-input').value.toLowerCase().trim();
+    let results = allProducts;
+
+    if (filters.metal !== 'all')
+      results = results.filter(p => p.prices?.metalType?.name === filters.metal);
+
+    if (filters.cat !== 'all')
+      results = results.filter(p => p.specifications?.category?.name === filters.cat);
+
+    if (filters.stock === 'instock')
+      results = results.filter(p => p.stocks?.inStock);
+    else if (filters.stock === 'outstock')
+      results = results.filter(p => !p.stocks?.inStock);
+
+    if (query)
+      results = results.filter(p =>
+        p.name?.toLowerCase().includes(query) ||
+        p.specifications?.sku?.toLowerCase().includes(query) ||
+        p.specifications?.brand?.name?.toLowerCase().includes(query)
+      );
+
+    renderList(results);
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function renderList(products) {
+    const list = document.getElementById('product-list');
+    const count = document.getElementById('products-count');
+
+    count.textContent = `${products.length} product${products.length !== 1 ? 's' : ''}`;
+
+    if (!products.length) {
+      list.innerHTML = '<div class="state-msg">No products match your filters.</div>';
+      return;
+    }
+
+    list.innerHTML = products.map(p => {
+      const metal    = p.prices?.metalType?.name || '–';
+      const cat      = p.specifications?.category?.name || '–';
+      const sku      = p.specifications?.sku || '–';
+      const price    = p.prices?.livePrice;
+      const buyback  = p.prices?.buyBackLivePrice;
+      const inStock  = p.stocks?.inStock;
+      const qty      = p.stocks?.quantityTotal ?? 0;
+      const ticker   = p.prices?.priceTicker;
+      const hasBB    = p.hasBuyBack;
+      const taxIncl  = p.taxIncluded;
+
+      const metalKey = metal === 'Gold' ? 'gold' : metal === 'Silver' ? 'silver' : 'watch';
+      const icon     = metal === 'Gold' ? '🥇' : metal === 'Silver' ? '🥈' : '⌚';
+
+      const metalBadge = `<span class="badge badge-${metalKey}">${metal}</span>`;
+      const catBadge   = `<span class="badge badge-cat">${cat}</span>`;
+      const vatBadge   = taxIncl
+        ? `<span class="badge badge-vat">VAT incl.</span>`
+        : `<span class="badge badge-novat">VAT exempt</span>`;
+
+      const tickerHtml = ticker === 'UP'
+        ? `<span class="ticker-up">▲</span>`
+        : ticker === 'DOWN'
+        ? `<span class="ticker-down">▼</span>`
+        : '';
+
+      const priceHtml = price != null
+        ? `<div class="price-label">Live Price ${tickerHtml}</div>
+           <div class="price-value">R ${price.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>`
+        : `<div class="price-value" style="color:var(--muted)">–</div>`;
+
+      const buybackHtml = hasBB && buyback > 0
+        ? `<div class="buyback-value">BB: R ${buyback.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>`
+        : `<div class="buyback-value" style="opacity:0.4">No buyback</div>`;
+
+      const stockHtml = `
+        <div><span class="stock-dot ${inStock ? 'in' : 'out'}"></span></div>
+        <span class="stock-qty">${inStock ? qty.toLocaleString() + ' units' : 'Out of stock'}</span>`;
+
+      return `
+        <div class="product-row">
+          <div class="product-icon ${metalKey}">${icon}</div>
+          <div class="product-info">
+            <div class="product-name">${p.name}</div>
+            <div class="product-meta">
+              <span class="product-sku">${sku}</span>
+              ${metalBadge}${catBadge}${vatBadge}
+            </div>
+          </div>
+          <div class="product-price">${priceHtml}${buybackHtml}</div>
+          <div class="product-stock">${stockHtml}</div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  loadProducts();
+</script>
+
+</body>
+</html>
