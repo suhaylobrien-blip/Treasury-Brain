@@ -25,13 +25,13 @@ ZAR_PER_USD = 18.50   # March 2026 prevailing rate
 
 def usd_to_zar(usd): return round(usd * ZAR_PER_USD, 2)
 
-# ── Clear existing SABIS hedging positions ────────────────────────────────────
-print("Clearing existing SABIS hedging positions...")
+# ── Clear existing SABIS Stone X positions (SAM positions are preserved) ─────
+print("Clearing existing SABIS Stone X hedging positions...")
 conn = get_conn()
-conn.execute("DELETE FROM hedging WHERE entity='SABIS'")
+conn.execute("DELETE FROM hedging WHERE entity='SABIS' AND platform='Stone X'")
 conn.commit()
 conn.close()
-print("  Done.")
+print("  Done.  (SAM / Proofs / Other positions preserved)")
 
 # ── End-of-day physical inventory (reconciled as of 9 April 2026) ─────────────
 print("\nSetting end-of-day physical inventory positions...")
