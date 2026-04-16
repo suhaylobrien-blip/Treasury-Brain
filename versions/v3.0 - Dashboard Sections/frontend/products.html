@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Products — Treasury Brain</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── PAGE-SPECIFIC ─────────────────────────────────────────────── */
+    .products-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 28px;
+      background: rgba(11,7,23,0.95);
+      border-bottom: 1px solid var(--border);
+    }
+    .products-toolbar input[type="search"] {
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 12px;
+      width: 220px;
+      outline: none;
+    }
+    .products-toolbar input[type="search"]:focus { border-color: var(--gold); }
+    .products-toolbar select {
+      background: var(--raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      cursor: pointer;
+    }
+    .products-toolbar select:focus { border-color: var(--gold); }
+    .products-toolbar .pill-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+      padding: 20px 28px;
+    }
+
+    .product-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color .2s, transform .15s;
+    }
+    .product-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+    }
+
+    .product-img-wrap {
+      background: rgba(107,57,175,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 130px;
+      overflow: hidden;
+    }
+    .product-img-wrap img {
+      max-height: 120px;
+      max-width: 100%;
+      object-fit: contain;
+    }
+    .product-img-placeholder {
+      font-size: 36px;
+      opacity: .3;
+    }
+
+    .product-body {
+      padding: 12px 14px 14px;
+    }
+    .product-name {
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      margin-bottom: 4px;
+    }
+    .product-meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .product-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(107,57,175,0.18);
+      color: var(--muted);
+    }
+    .product-tag.gold-tag   { background: rgba(212,167,85,0.15);  color: var(--gold); }
+    .product-tag.silver-tag { background: rgba(200,200,220,0.12); color: #c8c8dc; }
+    .product-tag.stock-tag  { background: rgba(64,181,173,0.15);  color: var(--green); }
+    .product-tag.nostock-tag{ background: rgba(220,50,50,0.12);   color: var(--red); }
+
+    .product-prices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+    .price-block {}
+    .price-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .price-val {
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .price-val.silver-val { color: #c8c8dc; }
+    .price-val.buyback-val { color: var(--green); font-size: 13px; }
+    .price-val.no-buyback  { color: var(--muted); font-size: 12px; }
+
+    .price-sub {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .loading-spinner {
+      text-align: center;
+      padding: 60px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .error-msg {
+      text-align: center;
+      padding: 40px;
+      color: var(--red);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Treasury Brain<span>SA Bullion · Products</span></div>
+  <div class="header-meta">
+    <a href="/" class="btn-refresh" style="text-decoration:none;">&#8592; Dashboard</a>
+    <span id="live-clock"></span>
+    <span id="spot-gold"   class="spot-badge gold">Au –</span>
+    <span id="spot-silver" class="spot-badge silver">Ag –</span>
+  </div>
+</header>
+
+<!-- Toolbar -->
+<div class="products-toolbar">
+  <input type="search" id="search-input" placeholder="Search products..." oninput="applyFilters()" />
+  <select id="metal-filter" onchange="applyFilters()">
+    <option value="">All Metals</option>
+    <option value="Gold">Gold</option>
+    <option value="Silver">Silver</option>
+    <option value="Platinum">Platinum</option>
+  </select>
+  <select id="category-filter" onchange="applyFilters()">
+    <option value="">All Categories</option>
+  </select>
+  <select id="stock-filter" onchange="applyFilters()">
+    <option value="">All Stock</option>
+    <option value="instock">In Stock</option>
+    <option value="outofstock">Out of Stock</option>
+  </select>
+  <span class="pill-count" id="pill-count">Loading…</span>
+</div>
+
+<!-- Grid -->
+<div class="products-grid" id="products-grid">
+  <div class="loading-spinner" style="grid-column:1/-1">Loading products…</div>
+</div>
+
+<script>
+  let allProducts = [];
+
+  // ── Clock ────────────────────────────────────────────────────────
+  function tickClock() {
+    const el = document.getElementById('live-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  setInterval(tickClock, 1000); tickClock();
+
+  // ── Spot prices ──────────────────────────────────────────────────
+  async function loadSpot() {
+    try {
+      const d = await fetch('/api/goldstore/live-price').then(r => r.json());
+      const rates = d.data?.rates || {};
+      const zarPerUsd = rates.ZAR || 0;
+      const goldZar   = (rates.USDXAU || 0) * zarPerUsd;
+      const silverZar = (rates.USDXAG || 0) * zarPerUsd;
+      const fmt = v => 'R ' + v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      document.getElementById('spot-gold').textContent   = 'Au ' + fmt(goldZar) + '/oz';
+      document.getElementById('spot-silver').textContent = 'Ag ' + fmt(silverZar) + '/oz';
+    } catch {}
+  }
+  loadSpot();
+  setInterval(loadSpot, 30000);
+
+  // ── Fetch all pages ──────────────────────────────────────────────
+  async function loadProducts() {
+    try {
+      const page1 = await fetch('/api/goldstore/products?page=1').then(r => r.json());
+      const totalPages = page1._pagination?.totalPage || 1;
+      let products = page1.data || [];
+
+      if (totalPages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, i) =>
+            fetch('/api/goldstore/products?page=' + (i + 2)).then(r => r.json()).then(d => d.data || [])
+          )
+        );
+        rest.forEach(page => products = products.concat(page));
+      }
+
+      allProducts = products;
+      populateCategoryFilter();
+      applyFilters();
+    } catch (e) {
+      document.getElementById('products-grid').innerHTML =
+        '<div class="error-msg" style="grid-column:1/-1">Failed to load products. Is the server running?<br><small>' + e.message + '</small></div>';
+    }
+  }
+
+  function populateCategoryFilter() {
+    const cats = [...new Set(allProducts.map(p => p.specifications?.category?.name).filter(Boolean))].sort();
+    const sel = document.getElementById('category-filter');
+    cats.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ── Filters ──────────────────────────────────────────────────────
+  function applyFilters() {
+    const search   = document.getElementById('search-input').value.toLowerCase();
+    const metal    = document.getElementById('metal-filter').value;
+    const category = document.getElementById('category-filter').value;
+    const stock    = document.getElementById('stock-filter').value;
+
+    const filtered = allProducts.filter(p => {
+      if (search && !p.name.toLowerCase().includes(search)) return false;
+      if (metal    && p.prices?.metalType?.name !== metal)             return false;
+      if (category && p.specifications?.category?.name !== category)   return false;
+      if (stock === 'instock'    && !p.stocks?.inStock)  return false;
+      if (stock === 'outofstock' &&  p.stocks?.inStock)  return false;
+      return true;
+    });
+
+    document.getElementById('pill-count').textContent = filtered.length + ' of ' + allProducts.length + ' products';
+    renderGrid(filtered);
+  }
+
+  // ── Render ───────────────────────────────────────────────────────
+  function zarFmt(v) {
+    if (!v) return '–';
+    return 'R ' + Number(v).toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  function pctFmt(v) {
+    if (!v) return '';
+    return Number(v).toFixed(2) + '% premium';
+  }
+
+  function renderGrid(products) {
+    const grid = document.getElementById('products-grid');
+    if (!products.length) {
+      grid.innerHTML = '<div class="loading-spinner" style="grid-column:1/-1">No products match the current filters.</div>';
+      return;
+    }
+
+    grid.innerHTML = products.map(p => {
+      const metal      = p.prices?.metalType?.name || '';
+      const metalLower = metal.toLowerCase();
+      const isGold     = metalLower === 'gold';
+      const isSilver   = metalLower === 'silver';
+      const sku        = p.specifications?.sku || p.specifications?.code || '';
+      const brand      = p.specifications?.brand?.name || '';
+      const category   = p.specifications?.category?.name || '';
+      const weightOz   = p.prices?.weightInOz || 0;
+      const livePrice  = p.prices?.livePrice || 0;
+      const buyback    = p.prices?.buyBackLivePrice || 0;
+      const premium    = p.prices?.premium || 0;
+      const inStock    = p.stocks?.inStock;
+      const qty        = p.stocks?.quantityTotal || 0;
+
+      const imgUrl = p.images?.find(i => i.isMain)?.cdnImageUrl
+                  || p.images?.find(i => i.isMain)?.imageUrl
+                  || p.images?.[0]?.cdnImageUrl
+                  || p.images?.[0]?.imageUrl
+                  || '';
+
+      const metalTag    = metal ? '<span class="product-tag ' + (isGold ? 'gold-tag' : isSilver ? 'silver-tag' : '') + '">' + metal + '</span>' : '';
+      const categoryTag = category ? '<span class="product-tag">' + category + '</span>' : '';
+      const stockTag    = inStock
+        ? '<span class="product-tag stock-tag">In Stock' + (qty ? ' (' + qty + ')' : '') + '</span>'
+        : '<span class="product-tag nostock-tag">Out of Stock</span>';
+
+      const imgHtml = imgUrl
+        ? '<img src="' + imgUrl + '" alt="' + p.name + '" loading="lazy" />'
+        : '<div class="product-img-placeholder">' + (isGold ? '🥇' : isSilver ? '🥈' : '💎') + '</div>';
+
+      const priceValClass = isGold ? '' : isSilver ? ' silver-val' : '';
+      const buybackHtml = p.hasBuyBack && buyback > 0
+        ? '<div class="price-val buyback-val">' + zarFmt(buyback) + '</div><div class="price-sub">Buyback</div>'
+        : '<div class="price-val no-buyback">No buyback</div>';
+
+      const vatNote = p.taxIncluded ? 'VAT incl.' : 'VAT exempt';
+
+      return '<div class="product-card">' +
+        '<div class="product-img-wrap">' + imgHtml + '</div>' +
+        '<div class="product-body">' +
+          '<div class="product-name">' + p.name + '</div>' +
+          '<div class="product-meta">' + metalTag + categoryTag + stockTag + '</div>' +
+          '<div class="product-prices">' +
+            '<div class="price-block">' +
+              '<div class="price-label">Live Price</div>' +
+              '<div class="price-val' + priceValClass + '">' + zarFmt(livePrice) + '</div>' +
+              '<div class="price-sub">' + (weightOz ? weightOz.toFixed(4) + ' oz · ' : '') + vatNote + '</div>' +
+            '</div>' +
+            '<div class="price-block">' +
+              '<div class="price-label">Buyback / Premium</div>' +
+              buybackHtml +
+              '<div class="price-sub">' + (premium ? pctFmt(premium) : '') + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  loadProducts();
+</script>
+</body>
+</html>

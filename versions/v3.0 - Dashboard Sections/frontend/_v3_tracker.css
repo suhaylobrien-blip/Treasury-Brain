@@ -1,0 +1,66 @@
+
+/* ── GLOBAL TARGET TRACKER ─────────────────────────────────────────── */
+.target-tracker {
+  background: rgba(11,7,23,0.96);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 8px 28px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.tt-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 90px;
+}
+
+.tt-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.tt-val {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.3px;
+}
+.tt-val.tt-pos { color: var(--gold); }
+.tt-val.tt-neg { color: var(--red); }
+
+.tt-progress-wrap {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tt-progress-labels {
+  display: flex;
+  justify-content: space-between;
+}
+
+.tt-bar {
+  height: 6px;
+  background: rgba(107,57,175,0.20);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tt-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--purple), var(--gold));
+  border-radius: 3px;
+  transition: width .5s ease;
+  max-width: 100%;
+}
+.tt-bar-fill.tt-over { background: linear-gradient(90deg, var(--gold), var(--green)); }
+.tt-bar-fill.tt-behind { background: linear-gradient(90deg, var(--red), var(--orange)); }

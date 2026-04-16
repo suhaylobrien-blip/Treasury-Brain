@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Treasury Brain — SA Bullion</title>
+  <meta name="theme-color" content="#1C1E45" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">Treasury Brain<span>SA Bullion</span></div>
+  <div class="header-meta">
+    <a href="/products.html" class="btn-refresh" style="text-decoration:none;">Products</a>
+    <span id="live-clock"></span>
+    <span id="spot-gold"   class="spot-badge gold">Au –</span>
+    <span id="spot-silver" class="spot-badge silver">Ag –</span>
+    <button class="btn-refresh" onclick="loadAll()">↻ Refresh</button>
+    <button class="btn-refresh" onclick="refreshSpot()">↻ Spot</button>
+  </div>
+</header>
+
+<!-- ── ENTITY TABS ── -->
+<nav class="entity-tabs">
+  <button class="tab active" onclick="switchEntity('SABIS', this)">SABIS</button>
+  <button class="tab"        onclick="switchEntity('SABI',  this)">SABI</button>
+  <button class="tab"        onclick="switchEntity('SABGB', this)">SABGB</button>
+</nav>
+<nav class="metal-tabs">
+  <button class="tab active" onclick="switchMetal('gold',     this)">Gold</button>
+  <button class="tab"        onclick="switchMetal('silver',   this)">Silver</button>
+  <button class="tab tab-combined" onclick="switchMetal('combined', this)">Combined</button>
+</nav>
+
+<main>
+
+  <!-- ═══════════════════════════════════════════
+       DATE FILTER — affects entire dashboard
+  ═══════════════════════════════════════════ -->
+  <div class="filter-toolbar standalone">
+    <div class="filter-pills">
+      <button class="pill active" onclick="setFilter('all',       this)">All</button>
+      <button class="pill"        onclick="setFilter('today',     this)">Today</button>
+      <button class="pill"        onclick="setFilter('yesterday', this)">Yesterday</button>
+      <button class="pill"        onclick="setFilter('week',      this)">This Week</button>
+      <button class="pill"        onclick="setFilter('month',     this)">This Month</button>
+      <button class="pill"        onclick="setFilter('year',      this)">This Year</button>
+    </div>
+    <div class="filter-custom">
+      <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
+      <span class="filter-sep">–</span>
+      <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
+    </div>
+    <span id="filter-label" class="filter-desc"></span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       EXPOSURE BANNER  (top-line position)
+  ═══════════════════════════════════════════ -->
+  <section class="exposure-banner">
+
+    <div class="exp-card" id="exp-card-provision">
+      <div class="exp-label">Provision Mode</div>
+      <div class="exp-value" id="exp-provision">–</div>
+      <div class="exp-sub"   id="exp-prov-sub">–</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-label">Net Exposure</div>
+      <div class="exp-value" id="exp-value-zar">–</div>
+      <div class="exp-sub"   id="exp-oz">–</div>
+    </div>
+
+    <div class="exp-card highlight">
+      <div class="exp-label">Total GP</div>
+      <div class="exp-value gold" id="exp-gp">–</div>
+      <div class="exp-sub"        id="exp-gp-sub">–</div>
+    </div>
+
+    <div class="exp-card combined-only">
+      <div class="exp-label">Combined GP (Au + Ag)</div>
+      <div class="exp-value gold" id="exp-combined-gp">–</div>
+      <div class="exp-sub"        id="exp-combined-gp-sub">–</div>
+    </div>
+
+    <div class="exp-card highlight single-metal-only" id="exp-card-alpha">
+      <div class="exp-label">Treasury Alpha</div>
+      <div class="exp-value" id="exp-alpha">–</div>
+      <div class="exp-sub"   id="exp-alpha-sub">–</div>
+    </div>
+
+    <div class="exp-card combined-only" id="exp-card-combined-alpha">
+      <div class="exp-label">Combined Alpha (Au + Ag)</div>
+      <div class="exp-value" id="exp-combined-alpha">–</div>
+      <div class="exp-sub"   id="exp-combined-alpha-sub">–</div>
+    </div>
+
+    <div class="exp-card highlight combined-only" id="exp-card-combined-pnl">
+      <div class="exp-label">Combined PNL</div>
+      <div class="exp-value" id="exp-combined-pnl">–</div>
+      <div class="exp-sub"   id="exp-combined-pnl-sub">–</div>
+    </div>
+
+    <div class="exp-card opening-pos-card">
+      <div class="exp-label">Opening Position</div>
+      <div class="opening-pos-row">
+        <input type="number" id="opening-pos-input" step="any"
+               placeholder="e.g. −500" title="Set ecosystem oz position (negative = short)" />
+        <span class="opening-pos-unit">oz</span>
+      </div>
+      <button class="btn-set-pos" onclick="setOpeningPosition()">Set</button>
+      <div class="exp-sub" id="opening-pos-sub">Ecosystem starting position</div>
+    </div>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       BUYBACKS | SALES | HEDGING
+  ═══════════════════════════════════════════ -->
+  <div class="trading-grid">
+
+    <!-- BUYBACKS -->
+    <section class="card trading-card">
+      <div class="tc-header buy-header">
+        <span class="tc-title">Buybacks</span>
+        <span class="tc-badge" id="buy-count">0 deals</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">VWAP</div>
+          <div class="tc-vwap-val" id="buy-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">VWAP Margin</div>
+          <div class="tc-vwap-val" id="buy-margin">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val"  id="buy-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Value</span>
+          <span class="tc-stat-val"  id="buy-value">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">GP Contribution</span>
+          <span class="tc-stat-val"  id="buy-gp">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SALES -->
+    <section class="card trading-card">
+      <div class="tc-header sell-header">
+        <span class="tc-title">Sales</span>
+        <span class="tc-badge" id="sell-count">0 deals</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">VWAP</div>
+          <div class="tc-vwap-val" id="sell-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">VWAP Margin</div>
+          <div class="tc-vwap-val" id="sell-margin">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val"  id="sell-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Value</span>
+          <span class="tc-stat-val"  id="sell-value">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">GP Contribution</span>
+          <span class="tc-stat-val"  id="sell-gp">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- HEDGING -->
+    <section class="card trading-card">
+      <div class="tc-header hedge-header">
+        <span class="tc-title">Hedging &amp; Positions</span>
+        <span class="tc-badge" id="hedge-count">0 positions</span>
+      </div>
+
+      <!-- Summary rows -->
+      <div class="hedge-rows">
+        <div class="hedge-item">
+          <div class="hedge-side long-label">Total Longs</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz long-val" id="hedge-long-oz">–</div>
+            <div class="hedge-val muted"   id="hedge-long-vwap">–</div>
+          </div>
+        </div>
+        <div class="hedge-item">
+          <div class="hedge-side short-label">Total Shorts</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz short-val" id="hedge-short-oz">–</div>
+            <div class="hedge-val muted"    id="hedge-short-vwap">–</div>
+          </div>
+        </div>
+        <div class="hedge-divider"></div>
+        <div class="hedge-item">
+          <div class="hedge-side net-label">Net Hedge</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz" id="hedge-net-oz">–</div>
+          </div>
+        </div>
+        <div class="hedge-item">
+          <div class="hedge-side" style="color:var(--gold);font-weight:700">Ecosystem Net</div>
+          <div class="hedge-nums">
+            <div class="hedge-oz" id="hedge-ecosystem-oz" style="color:var(--gold)">–</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Individual positions list -->
+      <div id="hedge-positions-list" class="hedge-positions-list"></div>
+
+      <!-- Add position form -->
+      <div class="hedge-add-form">
+        <div class="hedge-add-row h-metal-row">
+          <select id="h-metal-combined">
+            <option value="gold">Gold (XAU)</option>
+            <option value="silver">Silver (XAG)</option>
+          </select>
+        </div>
+        <div class="hedge-add-row">
+          <select id="h-platform">
+            <option>Stone X</option>
+            <option>SAM</option>
+            <option>Proofs</option>
+            <option>Other</option>
+          </select>
+          <select id="h-type">
+            <option value="long">Long</option>
+            <option value="short">Short</option>
+          </select>
+        </div>
+        <div class="hedge-add-row">
+          <input type="number" id="h-oz"    placeholder="Oz"    step="any" />
+          <input type="number" id="h-price" placeholder="Price (ZAR/oz)" step="any" />
+          <button class="btn-hedge-add" onclick="addHedgePosition()">+ Add</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TREASURY POSITIONS (Longs / Shorts)
+  ═══════════════════════════════════════════ -->
+  <div class="trading-grid">
+
+    <!-- LONGS -->
+    <section class="card trading-card">
+      <div class="tc-header long-header">
+        <span class="tc-title">Longs</span>
+        <span class="tc-badge" id="ht-long-count">0 positions</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Avg Open Price</div>
+          <div class="tc-vwap-val" id="ht-long-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="ht-long-val">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val" id="ht-long-oz">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHORTS -->
+    <section class="card trading-card">
+      <div class="tc-header short-header">
+        <span class="tc-title">Shorts</span>
+        <span class="tc-badge" id="ht-short-count">0 positions</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Avg Open Price</div>
+          <div class="tc-vwap-val" id="ht-short-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="ht-short-val">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val" id="ht-short-oz">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- NET POSITION -->
+    <section class="card trading-card">
+      <div class="tc-header hedge-header">
+        <span class="tc-title">Net Position</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Net Hedge</div>
+          <div class="tc-vwap-val" id="ht-net-oz">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Ecosystem Net</div>
+          <div class="tc-vwap-val" id="ht-eco-oz">–</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       COMBINED EXPOSURE + TREASURY ALPHA
+  ═══════════════════════════════════════════ -->
+  <div class="trading-grid">
+
+    <!-- BUY-SIDE (Buybacks + Longs) -->
+    <section class="card trading-card">
+      <div class="tc-header buy-header">
+        <span class="tc-title">Buybacks + Longs</span>
+        <span class="tc-badge" id="cexp-buy-badge">–</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Combined VWAP</div>
+          <div class="tc-vwap-val" id="cexp-buy-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="cexp-buy-val">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Volume</span>
+          <span class="tc-stat-val" id="cexp-buy-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Physical (Buybacks)</span>
+          <span class="tc-stat-val" id="cexp-buy-physical">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Hedged (Longs)</span>
+          <span class="tc-stat-val" id="cexp-buy-hedged">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TREASURY ALPHA -->
+    <section class="card trading-card" id="cexp-alpha-card">
+      <div class="tc-header hedge-header">
+        <span class="tc-title">Treasury Alpha</span>
+        <span class="tc-badge" id="cexp-matched-badge">–</span>
+      </div>
+      <div class="tc-vwap-row" style="grid-template-columns:1fr">
+        <div>
+          <div class="tc-vwap-label">Spread Value</div>
+          <div class="tc-vwap-val" id="cexp-alpha">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Matched oz</span>
+          <span class="tc-stat-val" id="cexp-alpha-sub">–</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SELL-SIDE (Sales + Shorts) -->
+    <section class="card trading-card">
+      <div class="tc-header sell-header">
+        <span class="tc-title">Sales + Shorts</span>
+        <span class="tc-badge" id="cexp-sell-badge">–</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Combined VWAP</div>
+          <div class="tc-vwap-val" id="cexp-sell-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="cexp-sell-val">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Volume</span>
+          <span class="tc-stat-val" id="cexp-sell-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Physical (Sales)</span>
+          <span class="tc-stat-val" id="cexp-sell-physical">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Hedged (Shorts)</span>
+          <span class="tc-stat-val" id="cexp-sell-hedged">–</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       OPEN POSITIONS LEDGER
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width">
+    <div class="card-header">
+      <h2>Open Positions Ledger <span id="positions-count-label" class="count-label"></span></h2>
+      <span class="positions-subtitle">All open hedging positions across Au + Ag — MTM updates live with spot</span>
+    </div>
+    <div class="table-wrap">
+      <table id="positions-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date Opened</th>
+            <th>Metal</th>
+            <th>Platform</th>
+            <th>Type</th>
+            <th>Oz</th>
+            <th>Open Price (ZAR/oz)</th>
+            <th>Book Value (ZAR)</th>
+            <th>Spot (ZAR/oz)</th>
+            <th>MTM (ZAR)</th>
+            <th>MTM %</th>
+            <th>Hedge Effect</th>
+            <th>Net Exposure After</th>
+            <th>Notes</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="positions-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       TOP DEAL OF THE DAY
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width top-deal-card" id="top-deal-section" style="display:none">
+    <h2>Top Deal of the Period</h2>
+    <div class="top-deal-grid">
+      <div class="top-deal-item">
+        <div class="top-deal-label">Dealer / Source</div>
+        <div class="top-deal-val" id="top-deal-dealer">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Product</div>
+        <div class="top-deal-val" id="top-deal-product">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Type</div>
+        <div class="top-deal-val" id="top-deal-type">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Volume</div>
+        <div class="top-deal-val" id="top-deal-oz">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">GP Contribution</div>
+        <div class="top-deal-val gold" id="top-deal-gp">–</div>
+      </div>
+      <div class="top-deal-item">
+        <div class="top-deal-label">Share of Total GP</div>
+        <div class="top-deal-val" id="top-deal-share">–</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       DEALER BREAKDOWN
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width">
+    <h2>Dealer Contributions</h2>
+    <div class="table-wrap">
+      <table id="dealer-table">
+        <thead>
+          <tr>
+            <th>Dealer</th>
+            <th>Deals</th>
+            <th>Buybacks</th>
+            <th>Sales</th>
+            <th>Buy Volume (oz)</th>
+            <th>Sell Volume (oz)</th>
+            <th>Buy VWAP</th>
+            <th>Sell VWAP</th>
+            <th>GP Contribution</th>
+            <th>GP %</th>
+          </tr>
+        </thead>
+        <tbody id="dealer-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       CHARTS ROW  (Volume by day + VWAP trend)
+  ═══════════════════════════════════════════ -->
+  <div class="charts-row">
+
+    <section class="card">
+      <h2>Deal Volume by Day (oz)</h2>
+      <canvas id="volume-chart" height="100"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>VWAP Trend — Buy vs Sell</h2>
+      <canvas id="vwap-chart" height="100"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>Daily GP Contribution (ZAR)</h2>
+      <canvas id="gp-chart" height="100"></canvas>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SECONDARY ROW: Charts + What-If
+  ═══════════════════════════════════════════ -->
+  <div class="secondary-grid">
+
+    <section class="card">
+      <h2>GP by Silo</h2>
+      <canvas id="silo-chart" height="120"></canvas>
+    </section>
+
+    <section class="card">
+      <h2>GP by Channel</h2>
+      <canvas id="channel-chart" height="120"></canvas>
+    </section>
+
+    <section class="card preview-panel">
+      <h2>Deal Impact Preview</h2>
+      <div class="form-row">
+        <label>Type
+          <select id="p-type">
+            <option value="sell">Sell</option>
+            <option value="buy">Buy</option>
+          </select>
+        </label>
+        <label>Units
+          <input type="number" id="p-units" value="1" min="0.0001" step="any" />
+        </label>
+        <label>Oz / Unit
+          <input type="number" id="p-equiv-oz" value="1.0" step="any" />
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Spot (ZAR/oz)
+          <input type="number" id="p-spot" step="any" placeholder="auto" />
+        </label>
+        <label>Margin %
+          <input type="number" id="p-margin" value="5.0" step="0.01" />
+        </label>
+        <button class="btn-primary" onclick="runPreview()">Preview</button>
+      </div>
+      <div id="preview-result" class="preview-result hidden"></div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       PIPELINE (yellow / quote deals)
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width" id="pipeline-section">
+    <div class="card-header">
+      <h2>Pipeline <span id="pipeline-count-label" class="count-label"></span></h2>
+      <span class="pipeline-subtitle">Quote deals — confirm when landed</span>
+    </div>
+    <div class="table-wrap">
+      <table id="pipeline-table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Type</th><th>Product</th>
+            <th>Units</th><th>Oz</th><th>Spot (ZAR)</th>
+            <th>Margin %</th><th>Est. Value</th>
+            <th>Est. GP</th><th>Exposure Effect</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="pipeline-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       ALL DEALS TABLE
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width">
+    <div class="card-header">
+      <h2>Deals <span id="deals-count-label" class="count-label"></span></h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label class="upload-label">
+          Upload Dealer Sheet
+          <input type="file" accept=".xlsx,.xls,.xlsm" onchange="uploadFile(this)" />
+        </label>
+        <button class="btn-reset" onclick="resetData()" title="Clear all deals and inventory for current entity/metal and re-import">
+          Reset Data
+        </button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="deals-table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Date</th><th class="metal-col">Metal</th><th>Type</th><th>Dealer</th>
+            <th>Silo</th><th>Channel</th><th>Product</th>
+            <th>Units</th><th>Oz</th><th>Spot (ZAR)</th>
+            <th>Margin %</th><th>Deal Value (ZAR)</th>
+            <th>Prov %</th><th>Profit %</th><th>GP (ZAR)</th>
+            <th>Inv After (oz)</th><th>Flipped</th>
+          </tr>
+        </thead>
+        <tbody id="deals-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       AGED INVENTORY
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width">
+    <h2>Aged Inventory</h2>
+    <div class="table-wrap">
+      <table id="aged-table">
+        <thead>
+          <tr>
+            <th>Acquired</th><th>Oz</th><th>Cost (ZAR)</th>
+            <th>Days Held</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="aged-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       MARGIN CALCULATORS
+  ═══════════════════════════════════════════ -->
+  <div class="calc-grid">
+
+    <!-- GOLD MARGIN CALC -->
+    <section class="card calc-card">
+      <h2>Gold Margin Calc</h2>
+      <div class="calc-mode-row">
+        <label class="calc-mode-label">
+          <input type="radio" name="gold-calc-mode" value="simple" checked onchange="goldCalcMode='simple';runGoldCalc()"> KR / Fixed price
+        </label>
+        <label class="calc-mode-label">
+          <input type="radio" name="gold-calc-mode" value="vat" onchange="goldCalcMode='vat';runGoldCalc()"> Minted bar (VAT incl)
+        </label>
+      </div>
+      <div class="calc-body">
+        <div class="calc-row">
+          <label>Spot (R/oz)<input type="number" id="gc-spot" step="any" placeholder="e.g. 78000" oninput="runGoldCalc()" /></label>
+          <label>Margin %<input type="number" id="gc-margin" step="0.01" placeholder="e.g. 3.75" oninput="runGoldCalc()" /></label>
+          <label id="gc-uom-wrap">Oz / Unit<input type="number" id="gc-oz" step="any" value="1" oninput="runGoldCalc()" /></label>
+        </div>
+        <div class="calc-result" id="gc-result">—</div>
+        <div class="calc-divider"></div>
+        <div class="calc-row">
+          <label>Unit Price (R)<input type="number" id="gc-price-in" step="any" placeholder="Given price" oninput="runGoldCalcBack()" /></label>
+          <label>Back-calc<select id="gc-back-mode" onchange="runGoldCalcBack()">
+            <option value="margin">→ Margin</option>
+            <option value="spot">→ Spot</option>
+          </select></label>
+        </div>
+        <div class="calc-result" id="gc-result-back">—</div>
+      </div>
+    </section>
+
+    <!-- SILVER MARGIN CALC -->
+    <section class="card calc-card">
+      <h2>Silver Margin Calc</h2>
+      <div class="calc-mode-row">
+        <label class="calc-mode-label">
+          <input type="radio" name="silver-calc-mode" value="coin" checked onchange="silverCalcMode='coin';runSilverCalc()"> 1oz coin / bar
+        </label>
+        <label class="calc-mode-label">
+          <input type="radio" name="silver-calc-mode" value="kilo" onchange="silverCalcMode='kilo';runSilverCalc()"> Kilobar (32.151oz)
+        </label>
+      </div>
+      <div class="calc-body">
+        <div class="calc-row">
+          <label>Spot (R/oz)<input type="number" id="sc-spot" step="any" placeholder="e.g. 1230" oninput="runSilverCalc()" /></label>
+          <label>Margin %<input type="number" id="sc-margin" step="0.01" placeholder="e.g. 15.0" oninput="runSilverCalc()" /></label>
+          <label id="sc-uom-wrap">Oz / Unit<input type="number" id="sc-oz" step="any" value="1" oninput="runSilverCalc()" /></label>
+        </div>
+        <div class="calc-result" id="sc-result">—</div>
+        <div class="calc-divider"></div>
+        <div class="calc-row">
+          <label>Unit Price VAT Incl (R)<input type="number" id="sc-price-in" step="any" placeholder="Given price" oninput="runSilverCalcBack()" /></label>
+          <label>Back-calc<select id="sc-back-mode" onchange="runSilverCalcBack()">
+            <option value="margin">→ Margin</option>
+            <option value="spot">→ Spot</option>
+          </select></label>
+        </div>
+        <div class="calc-result" id="sc-result-back">—</div>
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+<script src="dashboard.js"></script>
+</body>
+</html>

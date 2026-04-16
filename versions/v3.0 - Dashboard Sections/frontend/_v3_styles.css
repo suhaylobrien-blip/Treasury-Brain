@@ -1,0 +1,238 @@
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3.0 ADDITIONS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── SECTION TABS ─────────────────────────────────────────────────── */
+.section-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 28px;
+  background: rgba(11,7,23,0.98);
+  border-bottom: 2px solid var(--border-strong);
+}
+.stab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 11px 22px 9px;
+  cursor: pointer;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.stab:hover { color: var(--text); }
+.stab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+/* ── SECTION PANE VISIBILITY ──────────────────────────────────────── */
+.section-pane { display: flex; flex-direction: column; gap: 20px; }
+.section-pane.hidden { display: none !important; }
+
+/* ── 2-COL TRADING GRID ────────────────────────────────────────────── */
+.tgrid-2col { grid-template-columns: 1fr 1fr; }
+
+/* ── METAL EXPOSURE HEADERS ──────────────────────────────────────── */
+.gold-exp-header {
+  background: rgba(212,167,85,0.10);
+  border-bottom-color: rgba(212,167,85,0.28);
+}
+.gold-exp-header .tc-title { color: var(--gold); }
+
+.silver-exp-header {
+  background: rgba(200,200,220,0.07);
+  border-bottom-color: rgba(200,200,220,0.18);
+}
+.silver-exp-header .tc-title { color: #C0C8E0; }
+
+.texp-margin-val { color: var(--muted); }
+
+/* ── DAILY SUMMARY TABLE ────────────────────────────────────────── */
+.daily-summary-card { overflow: hidden; }
+
+.ds-target-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ds-target-label input {
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 10px;
+  width: 140px;
+  outline: none;
+}
+.ds-target-label input:focus { border-color: var(--purple); }
+
+.daily-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.daily-summary-table td {
+  padding: 7px 16px;
+  border-bottom: 1px solid rgba(107,57,175,0.10);
+}
+.daily-summary-table td:first-child { text-align: left; }
+.daily-summary-table td:not(:first-child) { text-align: right; }
+
+/* Title row */
+tr.ds-title-row td {
+  background: var(--purple-dk);
+  color: var(--gold);
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center !important;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 10px 16px;
+}
+
+/* Section headers */
+tr.ds-section td {
+  background: rgba(75,29,117,0.40);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  text-align: center !important;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+/* Data rows */
+tr.ds-data td { color: var(--text); }
+tr.ds-data td:first-child { padding-left: 24px; }
+tr.ds-stub td { color: var(--muted) !important; }
+tr.ds-stub .ds-val span { color: var(--muted) !important; }
+
+/* Subtotal rows */
+tr.ds-total td {
+  font-weight: 700;
+  font-family: var(--font-head);
+  background: rgba(107,57,175,0.08);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+tr.ds-total td:first-child { padding-left: 24px; }
+
+/* Group total (GROUP P&L) */
+tr.ds-group-total td {
+  background: rgba(75,29,117,0.50);
+  color: var(--gold);
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 15px;
+  border-top: 2px solid var(--purple);
+  border-bottom: 2px solid var(--purple);
+  padding: 10px 16px;
+}
+
+/* GP Tracker rows */
+tr.ds-tracker td {
+  background: rgba(11,7,23,0.5);
+  font-family: var(--font-head);
+  font-weight: 600;
+}
+tr.ds-tracker:last-child td { border-bottom: none; }
+
+.daily-summary-table tr:hover td { background: rgba(107,57,175,0.06); }
+tr.ds-section:hover td,
+tr.ds-title-row:hover td,
+tr.ds-group-total:hover td { background: inherit; }
+
+/* ── HIGHLIGHTS CARD ────────────────────────────────────────────── */
+.highlights-card { overflow: hidden; }
+
+.highlights-content {
+  padding: 8px 0;
+}
+
+.hl-section {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border);
+}
+.hl-section:last-child { border-bottom: none; }
+
+.hl-section-header {
+  background: rgba(75,29,117,0.35);
+  color: var(--text);
+  font-family: var(--font-head);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hl-trading-rows {
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hl-row {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.hl-row.hl-empty { color: var(--muted); font-style: italic; }
+.hl-oz     { font-weight: 700; color: var(--gold); }
+.hl-margin { font-weight: 700; color: var(--green); }
+
+.hl-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.hl-stats-table td {
+  padding: 6px 20px;
+  border-bottom: 1px solid rgba(107,57,175,0.10);
+  color: var(--text);
+}
+.hl-stats-table td:first-child { color: var(--muted); text-align: left; width: 70%; }
+.hl-stats-table td:last-child  { text-align: right; font-family: var(--font-head); font-weight: 600; }
+
+tr.hl-stats-total td {
+  border-top: 1px solid var(--border);
+  font-weight: 700 !important;
+  color: var(--text) !important;
+  background: rgba(107,57,175,0.06);
+}
+
+.hl-neg { color: var(--red)   !important; }
+.hl-pos { color: var(--gold)  !important; }
+
+/* ── DEALING: PREVIEW PANEL V3 (larger) ─────────────────────────── */
+.secondary-grid-v3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr;
+  gap: 12px;
+}
+.preview-panel-v3 { min-height: 340px; }
+
+/* ── INVENTORY PLACEHOLDER ──────────────────────────────────────── */
+.inventory-placeholder h2 { margin-bottom: 12px; }
+
+/* ── PNL COLOUR CODINGS (re-used for bank recon) ─────────────────── */
+.pos-mtm-pos { color: var(--gold); }
+.pos-mtm-neg { color: var(--red);  }
