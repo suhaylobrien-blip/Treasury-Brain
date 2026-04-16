@@ -1,0 +1,38 @@
+{
+  "entities": ["SABIS", "SABI", "SABGB"],
+  "provision_rates": {
+    "gold": 4.5,
+    "silver": 8.0
+  },
+  "dormancy_threshold_days": 14,
+  "silos": ["retail", "wholesale", "custody"],
+  "channels": ["digital", "dealer"],
+  "metals": ["gold", "silver"],
+  "google_sheets": {
+    "SABIS_gold": "",
+    "SABIS_silver": "",
+    "SABI_gold": "",
+    "SABI_silver": "",
+    "SABGB_gold": "",
+    "SABGB_silver": ""
+  },
+  "excel_reports": {
+    "SABIS_gold": "",
+    "SABIS_silver": "",
+    "SABI_gold": "",
+    "SABI_silver": "",
+    "SABGB_gold": "",
+    "SABGB_silver": ""
+  },
+  "bank_accounts": {
+    "SABIS": [],
+    "SABI": [],
+    "SABGB": []
+  },
+  "spot_price_api_key": "",
+  "spot_price_currency": "ZAR",
+  "inbox_folder": "data/inbox",
+  "processed_folder": "data/processed",
+  "errors_folder": "data/errors",
+  "reports_folder": "reports"
+}

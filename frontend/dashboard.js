@@ -5,8 +5,9 @@
 
 'use strict';
 
-let currentEntity = 'SABIS';
-let currentMetal  = 'gold';
+let currentEntity  = 'SABIS';
+let currentMetal   = 'gold';
+let currentSection = 'summary';
 let siloChart, channelChart, volumeChart, vwapChart, gpChart;
 let zarPerUsd  = 0;   // ZAR per 1 USD — populated from /api/spot
 let liveSpots  = { gold: 0, silver: 0 };  // live spot per metal for MTM calc
@@ -40,6 +41,15 @@ function switchEntity(entity, btn) {
   document.querySelectorAll('.entity-tabs .tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   loadAll();
+}
+
+function switchSection(section, btn) {
+  currentSection = section;
+  document.querySelectorAll('.section-tabs .stab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.section-pane').forEach(p => p.classList.add('hidden'));
+  const pane = document.getElementById('pane-' + section);
+  if (pane) pane.classList.remove('hidden');
 }
 
 function switchMetal(metal, btn) {
@@ -221,6 +231,14 @@ async function loadAll() {
     renderPipelineTable([...gPipe, ...sPipe], gInv, mHedge);
     renderDealsTable(allDeals);
     renderAgedInventory([...(gInv.aged_parcels || []), ...(sInv.aged_parcels || [])]);
+    // ── v3.0 section renders ──────────────────────────────────────────
+    if (typeof renderDailySummary    === 'function') renderDailySummary(gDeals, sDeals, gExp, sExp, gInv, sInv);
+    if (typeof renderHighlights      === 'function') renderHighlights(gDeals, sDeals, gExp, sExp, gInv, sInv, null, null);
+    if (typeof renderSummaryCharts   === 'function') renderSummaryCharts(gDeals, sDeals, gExp, sExp);
+    if (typeof renderTargetTracker   === 'function') renderTargetTracker(gDeals, sDeals, gExp, sExp, null);
+    if (typeof renderTreasuryExposure=== 'function') renderTreasuryExposure(gInv, sInv, gHedge, sHedge, gExp, sExp);
+    if (typeof renderDealingGP       === 'function') renderDealingGP(gDeals, sDeals, gInv, sInv);
+    if (typeof renderBankRecon       === 'function') renderBankRecon(gDeals, sDeals);
     await loadSpot();
     return;
   }
@@ -279,6 +297,24 @@ async function loadAll() {
   renderPipelineTable(pipeline, inv, hedging);
   renderDealsTable(deals);
   renderAgedInventory(inv.aged_parcels || []);
+
+  // ── v3.0 section renders ──────────────────────────────────────────
+  const goldDeals__   = currentMetal === 'gold'   ? deals : otherDeals;
+  const silverDeals__ = currentMetal === 'silver' ? deals : otherDeals;
+  const goldInv__     = currentMetal === 'gold'   ? inv   : otherInv;
+  const silverInv__   = currentMetal === 'silver' ? inv   : otherInv;
+  const goldHedge__   = currentMetal === 'gold'   ? hedging      : otherHedging;
+  const silverHedge__ = currentMetal === 'silver' ? hedging      : otherHedging;
+  const goldExp__     = currentMetal === 'gold'   ? exposure     : otherExposure;
+  const silverExp__   = currentMetal === 'silver' ? exposure     : otherExposure;
+  if (typeof renderDailySummary    === 'function') renderDailySummary(goldDeals__, silverDeals__, goldExp__, silverExp__, goldInv__, silverInv__);
+  if (typeof renderHighlights      === 'function') renderHighlights(goldDeals__, silverDeals__, goldExp__, silverExp__, goldInv__, silverInv__, null, null);
+  if (typeof renderSummaryCharts   === 'function') renderSummaryCharts(goldDeals__, silverDeals__, goldExp__, silverExp__);
+  if (typeof renderTargetTracker   === 'function') renderTargetTracker(goldDeals__, silverDeals__, goldExp__, silverExp__, null);
+  if (typeof renderTreasuryExposure=== 'function') renderTreasuryExposure(goldInv__, silverInv__, goldHedge__, silverHedge__, goldExp__, silverExp__);
+  if (typeof renderDealingGP       === 'function') renderDealingGP(deals, otherDeals, inv, otherInv);
+  if (typeof renderBankRecon       === 'function') renderBankRecon(goldDeals__, silverDeals__);
+
   await loadSpot();
 }
 
