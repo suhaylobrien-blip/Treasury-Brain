@@ -12,6 +12,7 @@ flowchart TD
         MetalsAPI["Metals-API\nLive XAU / XAG in ZAR"]
         SettingsJSON["config/settings.json\nEntities · Provision rates\nFolders · API key"]
         ProductsJSON["config/products.json\n100+ products\noz/unit · VAT flag"]
+        StoneXRecon["StoneX Recon · Stone x/build_recon.py\nMonthly account reconciliation\nOutputs: .xlsx (live formulas) + .pdf"]
     end
 
     %% ─────────────────────────────────────────
@@ -77,10 +78,13 @@ flowchart TD
 
     %% ─────────────────────────────────────────
     subgraph FRONTEND["🖥️ Dashboard · dashboard.js  (30s auto-refresh)"]
-        ExposureBanner["Exposure Banner\nProvision mode + rate\nNet inventory ZAR · Total GP · Spot"]
-        TradingCards["Trading Cards\nBuybacks card · Sales card\nHedging & Positions card"]
+        MetalFilter["Metal Filter Tabs\nGold · Silver · Combined\nbody.metal-filter-{metal} CSS class\nCombined: fetches both metals in parallel"]
+        ExposureBanner["Exposure Banner\nProvision mode + rate\nNet inventory ZAR · Total GP · Spot\nSingle-metal: Treasury Alpha\nCombined: Combined GP · Combined Alpha · Combined PNL"]
+        TradingCards["Trading Cards\nBuybacks card · Sales card\nHedging & Positions card\nCombined: per-metal VWAP split (Au/Ag)"]
+        TreasuryPositions["Treasury Positions\nLongs · Shorts · Net Position cards\nCombined: Au/Ag breakdown per card"]
+        PositionsLedger["Open Positions Ledger\nAll open hedge positions Au+Ag\nMTM vs live spot · hedge effect · net exposure"]
         Charts["Charts · Chart.js\nVolume by day · VWAP trend\nDaily GP · GP by Silo · GP by Channel"]
-        DealsTableUI["Deals Table\nFull transaction log\nDealer · Silo · Channel · GP · Flip flag"]
+        DealsTableUI["Deals Table\nFull transaction log\nDealer · Silo · Channel · GP · Flip flag\nCombined: Metal column (Au/Ag badge)"]
         DealerTable["Dealer Breakdown\nAggregates per dealer\nDeals · oz · VWAP · GP"]
         PipelineUI["Pipeline Table\nQuotes — Confirm button\npromotes to confirmed deal"]
         PreviewUI["What-If Preview\nSimulate deal before confirm\nShows GP · cash delta · inv after · flip warning"]
@@ -153,15 +157,19 @@ flowchart TD
     SpotTable --> SpotAPI & DashAPI
     DealsTable --> SiloAPI
 
+    %% StoneX recon → seed_positions.py → hedging DB
+    StoneXRecon -->|"monthly positions\n(XAU/XAG long oz, USD VWAP)"| HedgingTable
+
     %% API → Frontend
     DashAPI --> ExposureBanner & TradingCards
     DealsAPI --> DealsTableUI & Charts & DealerTable
     InvAPI --> AgeingUI
-    HedgeAPI --> TradingCards
+    HedgeAPI --> TradingCards & TreasuryPositions & PositionsLedger
     PipeAPI --> PipelineUI
     PreviewAPI --> PreviewUI
-    SpotAPI --> ExposureBanner
+    SpotAPI --> ExposureBanner & PositionsLedger
     SiloAPI --> Charts
+    MetalFilter -->|"controls which API calls are made\n(single metal or parallel Au+Ag)"| DashAPI
 
     %% User actions → API (back-flows)
     PreviewUI -->|"POST /api/preview"| PreviewAPI
@@ -185,3 +193,5 @@ flowchart TD
 | Watcher + manual upload | Both auto-import (drop in inbox) and manual upload paths supported |
 | VAT split in margin calc | Silver/minted bars = 15% VAT included; Krugerrands = VAT exempt (ZA tax treatment) |
 | Hedging separate from physical | Positions tracked independently; ecosystem net = physical inventory + hedge net |
+| Combined metal tab | Fetches gold + silver in parallel; merges deals/hedging/positions; VWAPs shown as "Au R[x] / Ag R[y]" split (can't average across metals) |
+| StoneX recon workflow | Monthly statement → build_recon.py (Excel + PDF) → seed_positions.py deletes old and re-inserts reconciled positions; USD legs and ZAR legs stored separately to preserve VWAP accuracy |
