@@ -30,8 +30,9 @@
   <button class="tab"        onclick="switchEntity('SABGB', this)">SABGB</button>
 </nav>
 <nav class="metal-tabs">
-  <button class="tab active" onclick="switchMetal('gold',   this)">Gold</button>
-  <button class="tab"        onclick="switchMetal('silver', this)">Silver</button>
+  <button class="tab active" onclick="switchMetal('gold',     this)">Gold</button>
+  <button class="tab"        onclick="switchMetal('silver',   this)">Silver</button>
+  <button class="tab tab-combined" onclick="switchMetal('combined', this)">Combined</button>
 </nav>
 
 <main>
@@ -79,16 +80,28 @@
       <div class="exp-sub"        id="exp-gp-sub">–</div>
     </div>
 
-    <div class="exp-card">
+    <div class="exp-card combined-only">
       <div class="exp-label">Combined GP (Au + Ag)</div>
       <div class="exp-value gold" id="exp-combined-gp">–</div>
       <div class="exp-sub"        id="exp-combined-gp-sub">–</div>
     </div>
 
-    <div class="exp-card">
-      <div class="exp-label">Live Spot</div>
-      <div class="exp-value" id="exp-spot">–</div>
-      <div class="exp-sub">ZAR / oz</div>
+    <div class="exp-card highlight single-metal-only" id="exp-card-alpha">
+      <div class="exp-label">Treasury Alpha</div>
+      <div class="exp-value" id="exp-alpha">–</div>
+      <div class="exp-sub"   id="exp-alpha-sub">–</div>
+    </div>
+
+    <div class="exp-card combined-only" id="exp-card-combined-alpha">
+      <div class="exp-label">Combined Alpha (Au + Ag)</div>
+      <div class="exp-value" id="exp-combined-alpha">–</div>
+      <div class="exp-sub"   id="exp-combined-alpha-sub">–</div>
+    </div>
+
+    <div class="exp-card highlight combined-only" id="exp-card-combined-pnl">
+      <div class="exp-label">Combined PNL</div>
+      <div class="exp-value" id="exp-combined-pnl">–</div>
+      <div class="exp-sub"   id="exp-combined-pnl-sub">–</div>
     </div>
 
     <div class="exp-card opening-pos-card">
@@ -216,6 +229,12 @@
 
       <!-- Add position form -->
       <div class="hedge-add-form">
+        <div class="hedge-add-row h-metal-row">
+          <select id="h-metal-combined">
+            <option value="gold">Gold (XAU)</option>
+            <option value="silver">Silver (XAG)</option>
+          </select>
+        </div>
         <div class="hedge-add-row">
           <select id="h-platform">
             <option>Stone X</option>
@@ -241,118 +260,197 @@
   <!-- ═══════════════════════════════════════════
        TREASURY POSITIONS (Longs / Shorts)
   ═══════════════════════════════════════════ -->
-  <section class="card full-width treasury-positions-card">
-    <div class="card-header">
-      <h2>Treasury Positions <span id="hedge-table-count" class="count-label"></span></h2>
-    </div>
+  <div class="trading-grid">
 
-    <!-- Long / Short summary cards — same style as Buybacks / Sales -->
-    <div class="trading-grid" style="margin-bottom:24px">
+    <!-- LONGS -->
+    <section class="card trading-card">
+      <div class="tc-header long-header">
+        <span class="tc-title">Longs</span>
+        <span class="tc-badge" id="ht-long-count">0 positions</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Avg Open Price</div>
+          <div class="tc-vwap-val" id="ht-long-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="ht-long-val">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val" id="ht-long-oz">–</span>
+        </div>
+      </div>
+    </section>
 
-      <section class="card trading-card">
-        <div class="tc-header long-header">
-          <span class="tc-title">Longs</span>
-          <span class="tc-badge" id="ht-long-count">0 positions</span>
+    <!-- SHORTS -->
+    <section class="card trading-card">
+      <div class="tc-header short-header">
+        <span class="tc-title">Shorts</span>
+        <span class="tc-badge" id="ht-short-count">0 positions</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Avg Open Price</div>
+          <div class="tc-vwap-val" id="ht-short-vwap">–</div>
         </div>
-        <div class="tc-vwap-row">
-          <div>
-            <div class="tc-vwap-label">VWAP</div>
-            <div class="tc-vwap-val" id="ht-long-vwap">–</div>
-          </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="ht-short-val">–</div>
         </div>
-        <div class="tc-stats">
-          <div class="tc-stat">
-            <span class="tc-stat-label">Volume</span>
-            <span class="tc-stat-val" id="ht-long-oz">–</span>
-          </div>
-          <div class="tc-stat">
-            <span class="tc-stat-label">Total Value</span>
-            <span class="tc-stat-val" id="ht-long-val">–</span>
-          </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Volume</span>
+          <span class="tc-stat-val" id="ht-short-oz">–</span>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="card trading-card">
-        <div class="tc-header short-header">
-          <span class="tc-title">Shorts</span>
-          <span class="tc-badge" id="ht-short-count">0 positions</span>
+    <!-- NET POSITION -->
+    <section class="card trading-card">
+      <div class="tc-header hedge-header">
+        <span class="tc-title">Net Position</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Net Hedge</div>
+          <div class="tc-vwap-val" id="ht-net-oz">–</div>
         </div>
-        <div class="tc-vwap-row">
-          <div>
-            <div class="tc-vwap-label">VWAP</div>
-            <div class="tc-vwap-val" id="ht-short-vwap">–</div>
-          </div>
+        <div>
+          <div class="tc-vwap-label">Ecosystem Net</div>
+          <div class="tc-vwap-val" id="ht-eco-oz">–</div>
         </div>
-        <div class="tc-stats">
-          <div class="tc-stat">
-            <span class="tc-stat-label">Volume</span>
-            <span class="tc-stat-val" id="ht-short-oz">–</span>
-          </div>
-          <div class="tc-stat">
-            <span class="tc-stat-label">Total Value</span>
-            <span class="tc-stat-val" id="ht-short-val">–</span>
-          </div>
-        </div>
-      </section>
+      </div>
+    </section>
 
-    </div>
-
-    <!-- Positions detail table -->
-    <div class="table-wrap">
-      <table id="hedge-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Platform</th>
-            <th>Type</th>
-            <th>Oz</th>
-            <th>Open Price (ZAR/oz)</th>
-            <th>Total Value</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody id="hedge-table-tbody"></tbody>
-      </table>
-    </div>
-  </section>
+  </div>
 
   <!-- ═══════════════════════════════════════════
        COMBINED EXPOSURE + TREASURY ALPHA
   ═══════════════════════════════════════════ -->
-  <section class="card full-width combined-exposure-card">
-    <h2>Combined Exposure &amp; Treasury Alpha</h2>
-    <div class="cexp-grid">
+  <div class="trading-grid">
 
-      <div class="cexp-side buy-side">
-        <div class="cexp-label">Buy-side (Buybacks + Longs)</div>
-        <div class="cexp-vwap" id="cexp-buy-vwap">–</div>
-        <div class="cexp-oz"   id="cexp-buy-oz">–</div>
-        <div class="cexp-val"  id="cexp-buy-val">–</div>
-        <div class="cexp-sub"  id="cexp-buy-sub">–</div>
+    <!-- BUY-SIDE (Buybacks + Longs) -->
+    <section class="card trading-card">
+      <div class="tc-header buy-header">
+        <span class="tc-title">Buybacks + Longs</span>
+        <span class="tc-badge" id="cexp-buy-badge">–</span>
       </div>
-
-      <div class="cexp-divider">
-        <div class="cexp-arrow">↔</div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Combined VWAP</div>
+          <div class="tc-vwap-val" id="cexp-buy-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="cexp-buy-val">–</div>
+        </div>
       </div>
-
-      <div class="cexp-alpha-block" id="cexp-alpha-card">
-        <div class="cexp-alpha-label">Treasury Alpha</div>
-        <div class="cexp-alpha-val"   id="cexp-alpha">–</div>
-        <div class="cexp-alpha-sub"   id="cexp-alpha-sub">–</div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Volume</span>
+          <span class="tc-stat-val" id="cexp-buy-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Physical (Buybacks)</span>
+          <span class="tc-stat-val" id="cexp-buy-physical">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Hedged (Longs)</span>
+          <span class="tc-stat-val" id="cexp-buy-hedged">–</span>
+        </div>
       </div>
+    </section>
 
-      <div class="cexp-divider">
-        <div class="cexp-arrow">↔</div>
+    <!-- TREASURY ALPHA -->
+    <section class="card trading-card" id="cexp-alpha-card">
+      <div class="tc-header hedge-header">
+        <span class="tc-title">Treasury Alpha</span>
+        <span class="tc-badge" id="cexp-matched-badge">–</span>
       </div>
-
-      <div class="cexp-side sell-side">
-        <div class="cexp-label">Sell-side (Sales + Shorts)</div>
-        <div class="cexp-vwap" id="cexp-sell-vwap">–</div>
-        <div class="cexp-oz"   id="cexp-sell-oz">–</div>
-        <div class="cexp-val"  id="cexp-sell-val">–</div>
-        <div class="cexp-sub"  id="cexp-sell-sub">–</div>
+      <div class="tc-vwap-row" style="grid-template-columns:1fr">
+        <div>
+          <div class="tc-vwap-label">Spread Value</div>
+          <div class="tc-vwap-val" id="cexp-alpha">–</div>
+        </div>
       </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Matched oz</span>
+          <span class="tc-stat-val" id="cexp-alpha-sub">–</span>
+        </div>
+      </div>
+    </section>
 
+    <!-- SELL-SIDE (Sales + Shorts) -->
+    <section class="card trading-card">
+      <div class="tc-header sell-header">
+        <span class="tc-title">Sales + Shorts</span>
+        <span class="tc-badge" id="cexp-sell-badge">–</span>
+      </div>
+      <div class="tc-vwap-row">
+        <div>
+          <div class="tc-vwap-label">Combined VWAP</div>
+          <div class="tc-vwap-val" id="cexp-sell-vwap">–</div>
+        </div>
+        <div>
+          <div class="tc-vwap-label">Total Value</div>
+          <div class="tc-vwap-val" id="cexp-sell-val">–</div>
+        </div>
+      </div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <span class="tc-stat-label">Total Volume</span>
+          <span class="tc-stat-val" id="cexp-sell-oz">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Physical (Sales)</span>
+          <span class="tc-stat-val" id="cexp-sell-physical">–</span>
+        </div>
+        <div class="tc-stat">
+          <span class="tc-stat-label">Hedged (Shorts)</span>
+          <span class="tc-stat-val" id="cexp-sell-hedged">–</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       OPEN POSITIONS LEDGER
+  ═══════════════════════════════════════════ -->
+  <section class="card full-width">
+    <div class="card-header">
+      <h2>Open Positions Ledger <span id="positions-count-label" class="count-label"></span></h2>
+      <span class="positions-subtitle">All open hedging positions across Au + Ag — MTM updates live with spot</span>
+    </div>
+    <div class="table-wrap">
+      <table id="positions-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date Opened</th>
+            <th>Metal</th>
+            <th>Platform</th>
+            <th>Type</th>
+            <th>Oz</th>
+            <th>Open Price (ZAR/oz)</th>
+            <th>Book Value (ZAR)</th>
+            <th>Spot (ZAR/oz)</th>
+            <th>MTM (ZAR)</th>
+            <th>MTM %</th>
+            <th>Hedge Effect</th>
+            <th>Net Exposure After</th>
+            <th>Notes</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="positions-tbody"></tbody>
+      </table>
     </div>
   </section>
 
@@ -526,7 +624,7 @@
       <table id="deals-table">
         <thead>
           <tr>
-            <th>ID</th><th>Date</th><th>Type</th><th>Dealer</th>
+            <th>ID</th><th>Date</th><th class="metal-col">Metal</th><th>Type</th><th>Dealer</th>
             <th>Silo</th><th>Channel</th><th>Product</th>
             <th>Units</th><th>Oz</th><th>Spot (ZAR)</th>
             <th>Margin %</th><th>Deal Value (ZAR)</th>

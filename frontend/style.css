@@ -174,6 +174,10 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 .exp-card.inactive .exp-value { color: var(--green); }
 .exp-card.active::before  { background: var(--red);   opacity: 0.8; }
 .exp-card.inactive::before { background: var(--green); opacity: 0.7; }
+.exp-card.alpha-positive .exp-value { color: var(--gold); }
+.exp-card.alpha-negative .exp-value { color: var(--red);  }
+.exp-card.alpha-positive::before    { background: var(--gold); opacity: 0.6; }
+.exp-card.alpha-negative::before    { background: var(--red);  opacity: 0.6; }
 
 .exp-label {
   font-size: 10px;
@@ -268,11 +272,11 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
   letter-spacing: .8px;
   color: var(--text);
 }
-.buy-header  .tc-title   { color: var(--green); }
-.sell-header .tc-title   { color: var(--gold); }
-.hedge-header .tc-title  { color: var(--purple-lt); }
-.long-header  .tc-title  { color: var(--green); }
-.short-header .tc-title  { color: #E05252; }
+.buy-header   .tc-title { color: var(--green); }
+.sell-header  .tc-title { color: var(--gold); }
+.hedge-header .tc-title { color: var(--purple-lt); }
+.long-header  .tc-title { color: var(--green); }
+.short-header .tc-title { color: var(--red); }
 
 .tc-badge {
   font-size: 11px;
@@ -766,6 +770,67 @@ tr.proof-row:hover td { background: rgba(64,70,180,0.14); }
   vertical-align: middle;
 }
 
+/* ── POSITIONS LEDGER ───────────────────────────────────────────────────── */
+.positions-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+td.pos-id    { color: var(--muted); font-size: 11px; }
+td.pos-notes { color: var(--muted); font-size: 11px; max-width: 200px; white-space: normal; }
+td.num       { text-align: right; font-family: var(--font-head); font-size: 12px; }
+
+td.pos-mtm-pos { color: var(--green); font-weight: 600; }
+td.pos-mtm-neg { color: var(--red);   font-weight: 600; }
+
+.pos-metal-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: .5px;
+}
+.pos-metal-badge.gold   { background: rgba(212,167,85,0.15); color: var(--gold);  border: 1px solid rgba(212,167,85,0.35); }
+.pos-metal-badge.silver { background: rgba(150,180,200,0.15); color: #9DB8CC;     border: 1px solid rgba(150,180,200,0.35); }
+
+.pos-type-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.pos-type-badge.pos-long  { background: rgba(64,181,173,0.12); color: var(--green); border: 1px solid rgba(64,181,173,0.3); }
+.pos-type-badge.pos-short { background: rgba(224,82,82,0.12);  color: var(--red);   border: 1px solid rgba(224,82,82,0.3); }
+
+.btn-pos-close {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-pos-close:hover { background: rgba(224,82,82,0.12); border-color: var(--red); color: var(--red); }
+
+td.empty-row { text-align: center; color: var(--muted); padding: 32px; font-style: italic; }
+
+.pos-cover {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 2px;
+}
+td.pos-net-cell { white-space: normal; min-width: 140px; }
+
 /* ── LIVE CLOCK ─────────────────────────────────────────────────────────── */
 #live-clock {
   color: var(--muted);
@@ -1005,3 +1070,33 @@ tr.pipeline-row:hover { background: rgba(212,167,85,0.12); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--purple); }
+
+/* ── METAL FILTER VISIBILITY (combined / single-metal toggle) ────────────── */
+/* Cards only relevant to a single metal are hidden in combined mode */
+body:not(.metal-filter-combined) .combined-only { display: none !important; }
+body.metal-filter-combined .single-metal-only   { display: none !important; }
+
+/* Metal column in deals table — only shown in combined mode */
+.metal-col { display: none; }
+body.metal-filter-combined .metal-col { display: table-cell !important; }
+
+/* Combined tab golden accent */
+.tab.tab-combined.active { color: var(--gold); }
+
+/* Metal badge inside deals table rows */
+.deal-metal-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: .5px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.deal-metal-badge.gold   { background: rgba(212,167,85,0.15);   color: var(--gold);  border: 1px solid rgba(212,167,85,0.35); }
+.deal-metal-badge.silver { background: rgba(150,180,200,0.15);  color: #9DB8CC;      border: 1px solid rgba(150,180,200,0.35); }
+
+/* Hedge add-form metal selector — only shown in combined mode */
+.h-metal-row { display: none; }
+body.metal-filter-combined .h-metal-row { display: flex; }
