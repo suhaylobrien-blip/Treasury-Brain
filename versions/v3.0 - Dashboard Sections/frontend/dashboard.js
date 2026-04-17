@@ -975,6 +975,45 @@ function renderPositionsTable(positions, goldPhysical, silverPhysical) {
   }
 
   // ── Render in display order (gold→silver, longs→shorts, newest first) ─────────
+  // ── MTM Summary card ─────────────────────────────────────────────────────────
+  const mtmData = open.map(p => {
+    const spot    = liveSpots[p.metal] || 0;
+    const bookVal = (p.contract_oz || 0) * (p.open_price_zar || 0);
+    const mtm     = spot > 0
+      ? (p.position_type === 'long'
+          ? (spot - p.open_price_zar) * p.contract_oz
+          : (p.open_price_zar - spot) * p.contract_oz)
+      : null;
+    return { mtm, bookVal, isLong: p.position_type === 'long', platform: p.platform || '', metal: p.metal };
+  });
+  const mtmTotal  = mtmData.reduce((s, x) => s + (x.mtm || 0), 0);
+  const mtmLongs  = mtmData.filter(x =>  x.isLong).reduce((s, x) => s + (x.mtm || 0), 0);
+  const mtmShorts = mtmData.filter(x => !x.isLong).reduce((s, x) => s + (x.mtm || 0), 0);
+  const mtmVals   = mtmData.map(x => x.mtm).filter(v => v !== null);
+  const mtmBest   = mtmVals.length ? Math.max(...mtmVals) : null;
+  const mtmWorst  = mtmVals.length ? Math.min(...mtmVals) : null;
+  const totalBook = mtmData.reduce((s, x) => s + x.bookVal, 0);
+  const avgPct    = totalBook > 0 ? (mtmTotal / totalBook) * 100 : null;
+
+  const colorClass = v => v >= 0 ? 'pos-mtm-pos' : 'pos-mtm-neg';
+  const setMtm = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el || val === null) return;
+    el.textContent = formatCurrency(val);
+    el.className   = 'tc-stat-val ' + colorClass(val);
+  };
+  set('mtm-positions-badge', open.length + ' position' + (open.length !== 1 ? 's' : ''));
+  setMtm('mtm-total',  mtmTotal);
+  setMtm('mtm-longs',  mtmLongs);
+  setMtm('mtm-shorts', mtmShorts);
+  setMtm('mtm-best',   mtmBest);
+  setMtm('mtm-worst',  mtmWorst);
+  const avgEl = document.getElementById('mtm-avg-pct');
+  if (avgEl && avgPct !== null) {
+    avgEl.textContent = (avgPct >= 0 ? '+' : '') + fmt(avgPct, 2) + '%';
+    avgEl.className   = 'tc-vwap-val ' + colorClass(avgPct);
+  }
+
   tbody.innerHTML = open.map(p => {
     const spot     = liveSpots[p.metal] || 0;
     const bookVal  = (p.contract_oz || 0) * (p.open_price_zar || 0);
@@ -1417,6 +1456,17 @@ async function loadSpot() {
     ? `Ag ${formatUSD(silver)}` : `Ag ${formatZAR(silver)}`;
 
   set('exp-spot', formatCurrency(currentMetal === 'gold' ? gold : silver));
+
+  // Live Market Rates card (treasury pane)
+  set('rates-gold-spot',   formatCurrency(gold));
+  set('rates-silver-spot', formatCurrency(silver));
+  if (zarPerUsd > 0) {
+    set('rates-zar-usd',     fmt(zarPerUsd, 2));
+    set('rates-gold-usd',    gold > 0   ? formatUSD(gold   / zarPerUsd) : '–');
+    set('rates-silver-usd',  silver > 0 ? formatUSD(silver / zarPerUsd) : '–');
+  }
+  const now = new Date();
+  set('rates-last-updated', now.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
   const spotEl = document.getElementById('p-spot');
   if (spotEl && !spotEl.dataset.manuallySet) {

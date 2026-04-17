@@ -607,10 +607,8 @@
   ═══════════════════════════════════════════════════════════ -->
   <div class="section-pane hidden" id="pane-treasury">
 
-    <!-- HEDGING -->
-    <div class="trading-grid">
-
-      <section class="card trading-card">
+    <!-- HEDGING (full-width) -->
+    <section class="card full-width trading-card">
         <div class="tc-header hedge-header">
           <span class="tc-title">Hedging &amp; Positions</span>
           <span class="tc-badge" id="hedge-count">0 positions</span>
@@ -673,9 +671,81 @@
             <button class="btn-hedge-add" onclick="addHedgePosition()">+ Add</button>
           </div>
         </div>
+    </section><!-- /hedging full-width -->
+
+    <!-- MTM SUMMARY + LIVE RATES -->
+    <div class="trading-grid tgrid-2col">
+
+      <section class="card trading-card">
+        <div class="tc-header hedge-header">
+          <span class="tc-title">Position MTM Summary</span>
+          <span class="tc-badge" id="mtm-positions-badge">–</span>
+        </div>
+        <div class="tc-vwap-row">
+          <div>
+            <div class="tc-vwap-label">Total MTM (ZAR)</div>
+            <div class="tc-vwap-val" id="mtm-total">–</div>
+          </div>
+          <div>
+            <div class="tc-vwap-label">Avg MTM %</div>
+            <div class="tc-vwap-val" id="mtm-avg-pct">–</div>
+          </div>
+        </div>
+        <div class="tc-stats">
+          <div class="tc-stat">
+            <span class="tc-stat-label">Longs MTM</span>
+            <span class="tc-stat-val" id="mtm-longs">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Shorts MTM</span>
+            <span class="tc-stat-val" id="mtm-shorts">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Best Position</span>
+            <span class="tc-stat-val" id="mtm-best">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Worst Position</span>
+            <span class="tc-stat-val" id="mtm-worst">–</span>
+          </div>
+        </div>
       </section>
 
-    </div><!-- /hedging grid -->
+      <section class="card trading-card">
+        <div class="tc-header hedge-header">
+          <span class="tc-title">Live Market Rates</span>
+        </div>
+        <div class="tc-vwap-row">
+          <div>
+            <div class="tc-vwap-label">Gold Spot (ZAR/oz)</div>
+            <div class="tc-vwap-val" id="rates-gold-spot">–</div>
+          </div>
+          <div>
+            <div class="tc-vwap-label">Silver Spot (ZAR/oz)</div>
+            <div class="tc-vwap-val" id="rates-silver-spot">–</div>
+          </div>
+        </div>
+        <div class="tc-stats">
+          <div class="tc-stat">
+            <span class="tc-stat-label">ZAR / USD</span>
+            <span class="tc-stat-val" id="rates-zar-usd">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Gold (USD/oz)</span>
+            <span class="tc-stat-val" id="rates-gold-usd">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Silver (USD/oz)</span>
+            <span class="tc-stat-val" id="rates-silver-usd">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Last Updated</span>
+            <span class="tc-stat-val" id="rates-last-updated">–</span>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /mtm + rates grid -->
 
     <!-- TREASURY POSITIONS (Longs / Shorts / Net) -->
     <div class="trading-grid">
@@ -1102,6 +1172,6 @@
 <script src="_v3_new_functions.js?v=1"></script>
 <script src="_v3_charts.js?v=1"></script>
 <script src="_v3_tracker.js?v=2"></script>
-<script src="dashboard.js?v=12"></script>
+<script src="dashboard.js?v=13"></script>
 </body>
 </html>
