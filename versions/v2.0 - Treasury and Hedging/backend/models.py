@@ -6,7 +6,7 @@ Single source of truth for all deal, inventory, hedging, cash flow and bank data
 import hashlib
 import sqlite3
 import os
-from datetime import date
+from datetime import date, datetime
 
 # Store DB in local AppData to avoid OneDrive sync conflicts with SQLite file locking
 _LOCAL_DATA = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'TreasuryBrain')
@@ -512,6 +512,23 @@ def get_latest_spot(metal: str) -> float:
     row = c.fetchone()
     conn.close()
     return row['price_zar'] if row else 0.0
+
+
+def get_spot_age_seconds(metal: str) -> float:
+    """Returns seconds since the last spot price was recorded. Returns inf if none."""
+    conn = get_conn()
+    c    = conn.cursor()
+    c.execute("SELECT recorded_at FROM spot_prices WHERE metal=? ORDER BY recorded_at DESC LIMIT 1",
+              (metal,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return float('inf')
+    try:
+        recorded = datetime.strptime(row['recorded_at'], '%Y-%m-%d %H:%M:%S')
+        return (datetime.utcnow() - recorded).total_seconds()
+    except Exception:
+        return float('inf')
 
 
 # ─────────────────────────────────────────────

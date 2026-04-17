@@ -8,7 +8,8 @@
 let currentEntity = 'SABIS';
 let currentMetal  = 'gold';
 let siloChart, channelChart, volumeChart, vwapChart, gpChart;
-let zarPerUsd = 0;  // ZAR per 1 USD — populated from /api/spot
+let zarPerUsd  = 0;   // ZAR per 1 USD — populated from /api/spot
+let liveSpots  = { gold: 0, silver: 0 };  // live spot per metal for MTM calc
 const POLL_INTERVAL = 30_000;
 
 // Date filter state
@@ -123,25 +124,67 @@ function buildExposureUrl() {
   return base;
 }
 
+function buildOtherExposureUrl() {
+  const otherMetal = currentMetal === 'gold' ? 'silver' : 'gold';
+  const base = `/api/exposure?entity=${currentEntity}&metal=${otherMetal}`;
+  if (filterFrom) return base + `&from=${filterFrom}` + (filterTo ? `&to=${filterTo}` : '');
+  return base;
+}
+
 async function loadAll() {
   const otherMetal = currentMetal === 'gold' ? 'silver' : 'gold';
   const otherDealsUrl = `/api/deals?entity=${currentEntity}&metal=${otherMetal}&limit=1000` +
     (filterFrom ? `&from=${filterFrom}` + (filterTo ? `&to=${filterTo}` : '') : '');
 
-  const [deals, inv, hedging, pipeline, otherDeals, exposure] = await Promise.all([
+  const otherMetal2     = currentMetal === 'gold' ? 'silver' : 'gold';
+  const otherHedgingUrl = `/api/hedging?entity=${currentEntity}&metal=${otherMetal2}`;
+  const otherInvUrl     = `/api/inventory?entity=${currentEntity}&metal=${otherMetal2}`;
+
+  const [deals, inv, hedging, pipeline, otherDeals, exposure, otherExposure, otherHedging, otherInv] = await Promise.all([
     api(buildDealsUrl()).catch(() => []),
     api(`/api/inventory?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({})),
     api(`/api/hedging?entity=${currentEntity}&metal=${currentMetal}`).catch(() => ({ positions: [], long_oz: 0, short_oz: 0, net_oz: 0 })),
     api(buildPipelineUrl()).catch(() => []),
     api(otherDealsUrl).catch(() => []),
     api(buildExposureUrl()).catch(() => ({})),
+    api(buildOtherExposureUrl()).catch(() => ({})),
+    api(otherHedgingUrl).catch(() => ({ positions: [] })),
+    api(otherInvUrl).catch(() => ({})),
   ]);
+
+  // Combine all metals' positions for the ledger table, sorted gold→silver, longs→shorts, newest first
+  const allPositions = [
+    ...(hedging.positions || []),
+    ...(otherHedging.positions || []),
+  ].sort((a, b) => {
+    if (a.metal !== b.metal) return a.metal === 'gold' ? -1 : 1;
+    if (a.position_type !== b.position_type) return a.position_type === 'long' ? -1 : 1;
+    return (b.open_date || '').localeCompare(a.open_date || '');
+  });
+
+  // Physical inventory per metal for exposure effect calculation
+  const goldPhysical   = currentMetal === 'gold'   ? (inv.total_oz || 0) : (otherInv.total_oz || 0);
+  const silverPhysical = currentMetal === 'silver' ? (inv.total_oz || 0) : (otherInv.total_oz || 0);
+
+  // Pre-compute combined GP + combined alpha for the PNL card
+  const goldDeals_    = currentMetal === 'gold'   ? deals : otherDeals;
+  const silverDeals_  = currentMetal === 'silver' ? deals : otherDeals;
+  const goldGP_       = goldDeals_.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+  const silverGP_     = silverDeals_.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
+  const combinedGP_   = goldGP_ + silverGP_;
+  const goldAlpha_    = currentMetal === 'gold'   ? (exposure.treasury_alpha || 0) : (otherExposure.treasury_alpha || 0);
+  const silverAlpha_  = currentMetal === 'silver' ? (exposure.treasury_alpha || 0) : (otherExposure.treasury_alpha || 0);
+  const combinedAlpha_ = goldAlpha_ + silverAlpha_;
 
   renderExposure(deals, inv, hedging);
   renderCombinedGP(deals, otherDeals);
+  renderCombinedPNL(combinedGP_, combinedAlpha_, goldGP_, silverGP_, goldAlpha_, silverAlpha_);
   renderTrading(deals);
   renderHedging(hedging, inv);
+  renderLongsShorts(hedging, inv);
   renderCombinedExposure(exposure);
+  renderBannerAlpha(exposure, otherExposure);
+  renderPositionsTable(allPositions, goldPhysical, silverPhysical);
   renderPipelineTable(pipeline, inv, hedging);
   renderDealsTable(deals);
   renderAgedInventory(inv.aged_parcels || []);
@@ -193,6 +236,49 @@ function renderCombinedGP(currentDeals, otherDeals) {
 
   set('exp-combined-gp',     formatCurrency(totalGP));
   set('exp-combined-gp-sub', `Au ${formatCurrency(goldGP)}  |  Ag ${formatCurrency(silverGP)}`);
+}
+
+// ─── COMBINED PNL BANNER ─────────────────────────────────────────────────────
+
+function renderCombinedPNL(combinedGP, combinedAlpha, goldGP, silverGP, goldAlpha, silverAlpha) {
+  const totalPNL = combinedGP + combinedAlpha;
+  set('exp-combined-pnl', formatCurrency(totalPNL));
+  set('exp-combined-pnl-sub',
+    `Au GP ${formatCurrency(goldGP)}  |  Ag GP ${formatCurrency(silverGP)}` +
+    `\u2003Au α ${formatCurrency(goldAlpha)}  |  Ag α ${formatCurrency(silverAlpha)}`
+  );
+
+  const card = document.getElementById('exp-card-combined-pnl');
+  if (card) {
+    card.classList.toggle('alpha-positive', totalPNL >= 0);
+    card.classList.toggle('alpha-negative', totalPNL <  0);
+  }
+}
+
+// ─── TREASURY ALPHA BANNER ───────────────────────────────────────────────────
+
+function renderBannerAlpha(currentExp, otherExp) {
+  const currentAlpha  = (currentExp && currentExp.treasury_alpha) || 0;
+  const otherAlpha    = (otherExp   && otherExp.treasury_alpha)   || 0;
+  const goldAlpha     = currentMetal === 'gold'   ? currentAlpha : otherAlpha;
+  const silverAlpha   = currentMetal === 'silver' ? currentAlpha : otherAlpha;
+  const combinedAlpha = goldAlpha + silverAlpha;
+
+  set('exp-alpha',     formatCurrency(currentAlpha));
+  set('exp-alpha-sub', `${currentMetal === 'gold' ? 'Au' : 'Ag'} · ${fmt((currentExp && currentExp.matched_oz) || 0, 2)} oz matched`);
+  set('exp-combined-alpha',     formatCurrency(combinedAlpha));
+  set('exp-combined-alpha-sub', `Au ${formatCurrency(goldAlpha)}  |  Ag ${formatCurrency(silverAlpha)}`);
+
+  const alphaCard = document.getElementById('exp-card-alpha');
+  if (alphaCard) {
+    alphaCard.classList.toggle('alpha-positive', currentAlpha >= 0);
+    alphaCard.classList.toggle('alpha-negative', currentAlpha <  0);
+  }
+  const combinedCard = document.getElementById('exp-card-combined-alpha');
+  if (combinedCard) {
+    combinedCard.classList.toggle('alpha-positive', combinedAlpha >= 0);
+    combinedCard.classList.toggle('alpha-negative', combinedAlpha <  0);
+  }
 }
 
 // ─── TOP DEAL TRACKER ────────────────────────────────────────────────────────
@@ -316,35 +402,183 @@ function renderHedging(hedging, inv) {
   });
 }
 
+// ─── TREASURY POSITIONS (Longs / Shorts) ─────────────────────────────────────
+
+function renderLongsShorts(hedging, inv) {
+  const positions = (hedging && hedging.positions) || [];
+  const longs  = positions.filter(p => p.position_type === 'long');
+  const shorts = positions.filter(p => p.position_type === 'short');
+
+  const longOz   = longs.reduce((s, p)  => s + (p.contract_oz    || 0), 0);
+  const shortOz  = shorts.reduce((s, p) => s + (p.contract_oz    || 0), 0);
+  const longVal  = longs.reduce((s, p)  => s + (p.open_price_zar || 0) * (p.contract_oz || 0), 0);
+  const shortVal = shorts.reduce((s, p) => s + (p.open_price_zar || 0) * (p.contract_oz || 0), 0);
+  const longVwap  = longOz  > 0 ? longVal  / longOz  : 0;
+  const shortVwap = shortOz > 0 ? shortVal / shortOz : 0;
+
+  const netOz       = longOz - shortOz;
+  const bullionOz   = (inv && inv.total_oz) || 0;
+  const ecosystemOz = bullionOz + netOz;
+
+  set('ht-long-count', longs.length  + ' position' + (longs.length  !== 1 ? 's' : ''));
+  set('ht-long-vwap',  longVwap  > 0 ? formatCurrency(longVwap)  : '–');
+  set('ht-long-val',   formatCurrency(longVal));
+  set('ht-long-oz',    fmt(longOz, 2)  + ' oz');
+
+  set('ht-short-count', shorts.length + ' position' + (shorts.length !== 1 ? 's' : ''));
+  set('ht-short-vwap',  shortVwap > 0 ? formatCurrency(shortVwap) : '–');
+  set('ht-short-val',   formatCurrency(shortVal));
+  set('ht-short-oz',    fmt(shortOz, 2) + ' oz');
+
+  set('ht-net-oz', fmt(netOz,       2) + ' oz');
+  set('ht-eco-oz', fmt(ecosystemOz, 2) + ' oz');
+}
+
 // ─── COMBINED EXPOSURE + TREASURY ALPHA ──────────────────────────────────────
 
 function renderCombinedExposure(exp) {
   if (!exp || !exp.buy_side) return;
 
-  const bs = exp.buy_side  || {};
-  const ss = exp.sell_side || {};
+  const bs    = exp.buy_side  || {};
+  const ss    = exp.sell_side || {};
   const alpha = exp.treasury_alpha || 0;
 
   // Buy-side (Buybacks + Longs)
-  set('cexp-buy-oz',   fmt(bs.oz || 0, 2) + ' oz');
-  set('cexp-buy-vwap', bs.vwap > 0 ? formatCurrency(bs.vwap) : '–');
-  set('cexp-buy-val',  formatCurrency(bs.val || 0));
-  set('cexp-buy-sub',  `${fmt(bs.buy_oz || 0, 2)} oz physical  ·  ${fmt(bs.long_oz || 0, 2)} oz hedged`);
+  set('cexp-buy-oz',       fmt(bs.oz || 0, 2) + ' oz');
+  set('cexp-buy-vwap',     bs.vwap > 0 ? formatCurrency(bs.vwap) : '–');
+  set('cexp-buy-val',      formatCurrency(bs.val || 0));
+  set('cexp-buy-physical', fmt(bs.buy_oz  || 0, 2) + ' oz');
+  set('cexp-buy-hedged',   fmt(bs.long_oz || 0, 2) + ' oz');
+  set('cexp-buy-badge',    fmt(bs.oz      || 0, 2) + ' oz total');
 
   // Sell-side (Sales + Shorts)
-  set('cexp-sell-oz',   fmt(ss.oz || 0, 2) + ' oz');
-  set('cexp-sell-vwap', ss.vwap > 0 ? formatCurrency(ss.vwap) : '–');
-  set('cexp-sell-val',  formatCurrency(ss.val || 0));
-  set('cexp-sell-sub',  `${fmt(ss.sell_oz || 0, 2)} oz physical  ·  ${fmt(ss.short_oz || 0, 2)} oz hedged`);
+  set('cexp-sell-oz',       fmt(ss.oz || 0, 2) + ' oz');
+  set('cexp-sell-vwap',     ss.vwap > 0 ? formatCurrency(ss.vwap) : '–');
+  set('cexp-sell-val',      formatCurrency(ss.val || 0));
+  set('cexp-sell-physical', fmt(ss.sell_oz  || 0, 2) + ' oz');
+  set('cexp-sell-hedged',   fmt(ss.short_oz || 0, 2) + ' oz');
+  set('cexp-sell-badge',    fmt(ss.oz       || 0, 2) + ' oz total');
 
   // Treasury Alpha
-  set('cexp-alpha',     formatCurrency(alpha));
-  set('cexp-alpha-sub', `Matched: ${fmt(exp.matched_oz || 0, 2)} oz`);
+  set('cexp-alpha',         formatCurrency(alpha));
+  set('cexp-alpha-sub',     fmt(exp.matched_oz || 0, 2) + ' oz matched');
+  set('cexp-matched-badge', fmt(exp.matched_oz || 0, 2) + ' oz matched');
 
   const alphaCard = document.getElementById('cexp-alpha-card');
   if (alphaCard) {
     alphaCard.classList.toggle('positive', alpha > 0);
     alphaCard.classList.toggle('negative', alpha < 0);
+  }
+}
+
+// ─── POSITIONS LEDGER TABLE ───────────────────────────────────────────────────
+
+function renderPositionsTable(positions, goldPhysical, silverPhysical) {
+  const tbody   = document.getElementById('positions-tbody');
+  const countEl = document.getElementById('positions-count-label');
+  if (!tbody) return;
+
+  const open = positions.filter(p => p.status === 'open' || !p.status);
+  if (countEl) countEl.textContent = open.length ? `${open.length} open` : '';
+
+  if (!open.length) {
+    tbody.innerHTML = `<tr><td colspan="15" class="empty-row">No open positions — add via the Hedging &amp; Positions panel above</td></tr>`;
+    return;
+  }
+
+  // ── Running net exposure (calculated chronologically, oldest position first) ──
+  // Mirrors inventory_after_oz in the deals table: shows where net exposure lands
+  // after each hedge position has been applied.
+  const physical = { gold: goldPhysical || 0, silver: silverPhysical || 0 };
+  const running  = { gold: physical.gold, silver: physical.silver };
+
+  // Running hedge VWAP per metal — for % vs spot calculation
+  const runningHedgeVal = { gold: 0, silver: 0 };  // Σ(delta × open_price)
+  const runningHedgeOz  = { gold: 0, silver: 0 };  // Σ(delta) — net hedge oz
+
+  const chronological = [...open].sort((a, b) =>
+    (a.open_date || '').localeCompare(b.open_date || '') || a.id - b.id
+  );
+  for (const p of chronological) {
+    const delta        = p.position_type === 'long' ? p.contract_oz : -p.contract_oz;
+    running[p.metal]         += delta;
+    runningHedgeVal[p.metal] += delta * p.open_price_zar;
+    runningHedgeOz[p.metal]  += delta;
+
+    const spot       = liveSpots[p.metal] || 0;
+    const hedgeVwap  = runningHedgeOz[p.metal] !== 0
+      ? runningHedgeVal[p.metal] / runningHedgeOz[p.metal] : 0;
+
+    p._hedgeEffect  = delta;
+    p._runningNet   = running[p.metal];
+    p._physicalBase = physical[p.metal];
+    p._coverPct     = physical[p.metal] !== 0
+      ? (Math.abs(delta) / Math.abs(physical[p.metal]) * 100) : 0;
+    p._runZar       = Math.abs(running[p.metal]) * spot;
+    // % diff = how far live spot is from the avg hedge open price
+    p._spotPct      = (spot > 0 && hedgeVwap > 0)
+      ? (spot - hedgeVwap) / hedgeVwap * 100 : null;
+  }
+
+  // ── Render in display order (gold→silver, longs→shorts, newest first) ─────────
+  tbody.innerHTML = open.map(p => {
+    const spot     = liveSpots[p.metal] || 0;
+    const bookVal  = (p.contract_oz || 0) * (p.open_price_zar || 0);
+    const mtm      = spot > 0
+      ? (p.position_type === 'long'
+          ? (spot - p.open_price_zar) * p.contract_oz
+          : (p.open_price_zar - spot) * p.contract_oz)
+      : null;
+    const mtmPct   = (mtm !== null && bookVal > 0) ? (mtm / bookVal * 100) : null;
+    const isLong   = p.position_type === 'long';
+    const mtmClass = mtm === null ? '' : (mtm >= 0 ? 'pos-mtm-pos' : 'pos-mtm-neg');
+
+    // Hedge effect column
+    const effSign  = p._hedgeEffect >= 0 ? '+' : '';
+    const effClass = p._hedgeEffect >= 0 ? 'pos-mtm-pos' : 'pos-mtm-neg';
+
+    // Running net column — direction label + ZAR at live spot + % vs spot
+    const netAbs   = Math.abs(p._runningNet);
+    const dirLabel = p._runningNet > 0 ? 'Long' : p._runningNet < 0 ? 'Short' : 'Flat';
+    const dirClass = p._runningNet > 0 ? 'pos-mtm-pos' : p._runningNet < 0 ? 'pos-mtm-neg' : '';
+    const spotSign = p._spotPct !== null ? (p._spotPct >= 0 ? '+' : '') : '';
+    const spotPctClass = p._spotPct !== null
+      ? (p._spotPct >= 0 ? 'pos-mtm-pos' : 'pos-mtm-neg') : '';
+
+    return `<tr>
+      <td class="pos-id">${p.id}</td>
+      <td>${p.open_date || '–'}</td>
+      <td><span class="pos-metal-badge ${p.metal}">${p.metal === 'gold' ? 'Au' : 'Ag'}</span></td>
+      <td>${p.platform || '–'}</td>
+      <td><span class="pos-type-badge ${isLong ? 'pos-long' : 'pos-short'}">${isLong ? 'Long' : 'Short'}</span></td>
+      <td class="num">${fmt(p.contract_oz, 2)} oz</td>
+      <td class="num">${formatCurrency(p.open_price_zar)}</td>
+      <td class="num">${formatCurrency(bookVal)}</td>
+      <td class="num">${spot > 0 ? formatCurrency(spot) : '–'}</td>
+      <td class="num ${mtmClass}">${mtm !== null ? formatCurrency(mtm) : '–'}</td>
+      <td class="num ${mtmClass}">${mtmPct !== null ? fmt(mtmPct, 2) + '%' : '–'}</td>
+      <td class="num ${effClass}">${effSign}${fmt(p._hedgeEffect, 2)} oz
+        <span class="pos-cover">${fmt(p._coverPct, 1)}% of physical</span></td>
+      <td class="num pos-net-cell">
+        <span class="${dirClass}">${fmt(netAbs, 2)} oz ${dirLabel}</span>
+        <span class="pos-cover">${p._runZar > 0 ? formatCurrency(p._runZar) + ' at spot' : '–'}</span>
+        ${p._spotPct !== null
+          ? `<span class="pos-cover ${spotPctClass}">${spotSign}${fmt(p._spotPct, 2)}% vs avg open</span>`
+          : ''}
+      </td>
+      <td class="pos-notes">${p.notes || '–'}</td>
+      <td><button class="btn-pos-close" onclick="closePosition(${p.id})">Close</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function closePosition(id) {
+  try {
+    await api(`/api/hedging/${id}`, { method: 'DELETE' });
+    showToast('Position closed');
+    loadAll();
+  } catch (e) {
+    showToast('Failed to close position', true);
   }
 }
 
@@ -632,6 +866,8 @@ async function loadSpot() {
   const gold   = spots['gold']   || 0;
   const silver = spots['silver'] || 0;
   if (spots['usd_rate']) zarPerUsd = spots['usd_rate'];
+  liveSpots.gold   = gold;
+  liveSpots.silver = silver;
 
   const isSabi = currentEntity === 'SABI';
   document.getElementById('spot-gold').textContent   = isSabi

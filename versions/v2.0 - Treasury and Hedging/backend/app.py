@@ -10,7 +10,7 @@ from datetime import date, datetime
 from flask import Flask, jsonify, request, send_from_directory, abort
 
 from models import (
-    get_deals, get_inventory, get_aged_inventory, get_latest_spot,
+    get_deals, get_inventory, get_aged_inventory, get_latest_spot, get_spot_age_seconds,
     get_cash_flows, insert_spot_price, init_db, reset_entity_data,
     set_inventory_position,
     get_hedging_positions, insert_hedging_position, close_hedging_position,
@@ -166,19 +166,19 @@ def cash_flows_endpoint():
     return jsonify(flows)
 
 
+SPOT_STALE_SECONDS = 300  # re-fetch from GoldStore if price is older than 5 minutes
+
 @app.route('/api/spot')
 def spot_endpoint():
-    """Return latest spot prices for all metals. Auto-fetches if DB has no price yet."""
-    result = {}
-    needs_fetch = False
-    for metal in CONFIG['metals']:
-        price = get_latest_spot(metal)
-        if not price:
-            needs_fetch = True
-        result[metal] = price
-
+    """Return latest spot prices. Auto-fetches from GoldStore if missing or stale (>5 min)."""
+    needs_fetch = any(
+        get_spot_age_seconds(metal) > SPOT_STALE_SECONDS
+        for metal in CONFIG['metals']
+    )
     if needs_fetch:
         result = fetch_all_spots()
+    else:
+        result = {metal: get_latest_spot(metal) for metal in CONFIG['metals']}
 
     result['usd_rate'] = get_zar_rate()
     return jsonify(result)
