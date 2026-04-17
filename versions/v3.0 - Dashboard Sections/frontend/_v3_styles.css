@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── SECTION TABS ─────────────────────────────────────────────────── */
-.section-tabs {
+.section-tabs, .section-tabs-top {
   display: flex;
   gap: 2px;
   padding: 0 28px;

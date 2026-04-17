@@ -5,13 +5,24 @@
 
 'use strict';
 
-let currentEntity  = 'SABIS';
-let currentMetal   = 'gold';
-let currentSection = 'summary';
+let currentEntity    = 'SABIS';
+let currentMetal     = 'gold';
+let currentSection   = 'summary';
+let currentCategory  = 'all';   // all | bullion | proof
 let siloChart, channelChart, volumeChart, vwapChart, gpChart;
 let zarPerUsd  = 0;   // ZAR per 1 USD — populated from /api/spot
 let liveSpots  = { gold: 0, silver: 0 };  // live spot per metal for MTM calc
 const POLL_INTERVAL = 30_000;
+
+// Cached snapshot data for inventory re-filtering
+let _invSnap = { goldBull: null, goldProof: null, silBull: null, silProof: null };
+
+// Cached deal/inv/hedging state — refreshed on every loadAll, used by spot refresh
+let _vwapCache = { deals: [], otherDeals: [], inv: {}, hedging: {}, otherInv: {}, otherHedging: {} };
+
+// Net GP tracking — updated by renderExposure + renderBannerAlpha
+let _lastDealingGP      = 0;
+let _lastTreasuryAlpha  = 0;
 
 // Date filter state
 let filterMode  = 'all';   // all | today | week | month | year | custom
@@ -45,11 +56,12 @@ function switchEntity(entity, btn) {
 
 function switchSection(section, btn) {
   currentSection = section;
-  document.querySelectorAll('.section-tabs .stab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section-tabs-top .stab, .section-tabs .stab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   document.querySelectorAll('.section-pane').forEach(p => p.classList.add('hidden'));
   const pane = document.getElementById('pane-' + section);
   if (pane) pane.classList.remove('hidden');
+  updateBannerLayout();
 }
 
 function switchMetal(metal, btn) {
@@ -59,6 +71,24 @@ function switchMetal(metal, btn) {
   // Drive CSS visibility via body class
   document.body.classList.remove('metal-filter-gold', 'metal-filter-silver', 'metal-filter-combined');
   document.body.classList.add(`metal-filter-${metal}`);
+  loadAll();
+}
+
+// ─── CATEGORY FILTER (Bullion / Proof) ───────────────────────────────────────
+
+const isNumism = d => ((d.silo || '') + (d.product_name || '') + (d.channel || '')).toLowerCase()
+  .match(/numism|proof|coin/);
+
+function filterByCategory(deals, cat) {
+  if (cat === 'bullion') return deals.filter(d => !isNumism(d));
+  if (cat === 'proof')   return deals.filter(d =>  isNumism(d));
+  return deals;
+}
+
+function switchCategory(cat, btn) {
+  currentCategory = cat;
+  document.querySelectorAll('.cat-tab').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
   loadAll();
 }
 
@@ -206,13 +236,23 @@ async function loadAll() {
     const provActive = (gInv.total_oz || 0) < 0;
     const provRate   = (gInv.provision || {}).rate_pct || 0;
     set('exp-value-zar', formatZAR(Math.abs(goldEcoOz) * goldSpot));
-    set('exp-oz',        `Au ${fmt(goldEcoOz, 2)} oz  ·  Ag ${fmt(silverEcoOz, 2)} oz`);
-    set('exp-gp',        formatCurrency(combGP_));
-    set('exp-gp-sub',    `${allDeals.length} deal${allDeals.length !== 1 ? 's' : ''} total (Au+Ag)`);
+    setSubLines('exp-oz',
+      [`Au ${fmt(goldEcoOz, 2)} oz`, 'gold net exposure'],
+      [`Ag ${fmt(silverEcoOz, 2)} oz`, 'silver net exposure'],
+    );
+    set('exp-gp',   formatCurrency(combGP_));
+    setSubLines('exp-gp-sub',
+      [`${allDeals.length}`, `deal${allDeals.length !== 1 ? 's' : ''} in period (Au+Ag)`],
+    );
     set('exp-provision', provActive ? 'PROVISION' : 'NO PROVISION');
-    set('exp-prov-sub',  provActive
-      ? `${provRate}% applies (Au)`
-      : `Au ${fmt(gInv.total_oz || 0, 2)} oz  ·  Ag ${fmt(sInv.total_oz || 0, 2)} oz`);
+    if (provActive) {
+      setSubLines('exp-prov-sub', [`${provRate}%`, 'provision rate applies (Au)']);
+    } else {
+      setSubLines('exp-prov-sub',
+        [`Au ${fmt(gInv.total_oz || 0, 2)} oz`, 'gold physical'],
+        [`Ag ${fmt(sInv.total_oz || 0, 2)} oz`, 'silver physical'],
+      );
+    }
     const provCard = document.getElementById('exp-card-provision');
     if (provCard) {
       provCard.classList.toggle('active',   provActive);
@@ -220,25 +260,46 @@ async function loadAll() {
     }
 
     set('exp-combined-gp',     formatCurrency(combGP_));
-    set('exp-combined-gp-sub', `Au ${formatCurrency(goldGP_)}  |  Ag ${formatCurrency(silverGP_)}`);
+    setSubLines('exp-combined-gp-sub',
+      [formatCurrency(goldGP_), 'gold GP'],
+      [formatCurrency(silverGP_), 'silver GP'],
+    );
+    const fgDeals = filterByCategory(gDeals, currentCategory);
+    const fsDeals = filterByCategory(sDeals, currentCategory);
+    const fallDeals = filterByCategory(allDeals, currentCategory);
     renderCombinedPNL(combGP_, combAlpha_, goldGP_, silverGP_, goldAlpha_, silverAlpha_);
-    renderTrading(allDeals);
+    renderTrading(fallDeals);
     renderHedging(mHedge, gInv);
     renderLongsShorts(mHedge, gInv);
     renderCombinedExposure(gExp);
     renderBannerAlpha(gExp, sExp);
     renderPositionsTable(allPositions, gInv.total_oz || 0, sInv.total_oz || 0);
     renderPipelineTable([...gPipe, ...sPipe], gInv, mHedge);
-    renderDealsTable(allDeals);
+    renderDealsTable(fallDeals);
     renderAgedInventory([...(gInv.aged_parcels || []), ...(sInv.aged_parcels || [])]);
     // ── v3.0 section renders ──────────────────────────────────────────
-    if (typeof renderDailySummary    === 'function') renderDailySummary(gDeals, sDeals, gExp, sExp, gInv, sInv);
-    if (typeof renderHighlights      === 'function') renderHighlights(gDeals, sDeals, gExp, sExp, gInv, sInv, null, null);
-    if (typeof renderSummaryCharts   === 'function') renderSummaryCharts(gDeals, sDeals, gExp, sExp);
-    if (typeof renderTargetTracker   === 'function') renderTargetTracker(gDeals, sDeals, gExp, sExp, null);
+    if (typeof renderDailySummary    === 'function') renderDailySummary(fgDeals, fsDeals, gExp, sExp, gInv, sInv);
+    if (typeof renderHighlights      === 'function') renderHighlights(fgDeals, fsDeals, gExp, sExp, gInv, sInv, null, null);
+    if (typeof renderSummaryCharts   === 'function') renderSummaryCharts(fgDeals, fsDeals, gExp, sExp);
+    if (typeof renderTargetTracker   === 'function') renderTargetTracker(fgDeals, fsDeals, gExp, sExp, null);
     if (typeof renderTreasuryExposure=== 'function') renderTreasuryExposure(gInv, sInv, gHedge, sHedge, gExp, sExp);
-    if (typeof renderDealingGP       === 'function') renderDealingGP(gDeals, sDeals, gInv, sInv);
-    if (typeof renderBankRecon       === 'function') renderBankRecon(gDeals, sDeals);
+    if (typeof renderDealingGP       === 'function') renderDealingGP(fgDeals, fsDeals, gInv, sInv);
+    if (typeof renderBankRecon       === 'function') renderBankRecon(fgDeals, fsDeals);
+    // ── Inventory snapshot ─────────────────────────────────────────────────
+    const snapBase = `entity=${currentEntity}`;
+    const [gsBull, gsProof, ssBull, ssProof] = await Promise.all([
+      api(`/api/inv/snapshot?${snapBase}&metal=gold&category=bullion`).catch(() => null),
+      api(`/api/inv/snapshot?${snapBase}&metal=gold&category=proof`).catch(() => null),
+      api(`/api/inv/snapshot?${snapBase}&metal=silver&category=bullion`).catch(() => null),
+      api(`/api/inv/snapshot?${snapBase}&metal=silver&category=proof`).catch(() => null),
+    ]);
+    _invSnap = { goldBull: gsBull, goldProof: gsProof, silBull: ssBull, silProof: ssProof };
+    if (typeof renderInventorySnapshot === 'function') renderInventorySnapshot(gsBull, gsProof, ssBull, ssProof);
+    // Store combined inv refs for VWAP banner spot refresh
+    gInv_ = gInv; sInv_ = sInv; gHedge_ = gHedge; sHedge_ = sHedge;
+    _vwapCache = { deals: fgDeals, otherDeals: fsDeals, inv: gInv, hedging: gHedge, otherInv: sInv, otherHedging: sHedge };
+    renderVwapBanner(fgDeals, fsDeals, gInv, gHedge, sInv, sHedge);
+    updateBannerLayout();
     await loadSpot();
     return;
   }
@@ -285,22 +346,25 @@ async function loadAll() {
   const silverAlpha_  = currentMetal === 'silver' ? (exposure.treasury_alpha || 0) : (otherExposure.treasury_alpha || 0);
   const combinedAlpha_ = goldAlpha_ + silverAlpha_;
 
+  const fDeals       = filterByCategory(deals, currentCategory);
+  const fOtherDeals  = filterByCategory(otherDeals, currentCategory);
+  // Exposure banner + ecosystem always use full (unfiltered) deals
   renderExposure(deals, inv, hedging);
   renderCombinedGP(deals, otherDeals);
   renderCombinedPNL(combinedGP_, combinedAlpha_, goldGP_, silverGP_, goldAlpha_, silverAlpha_);
-  renderTrading(deals);
+  renderTrading(fDeals);
   renderHedging(hedging, inv);
   renderLongsShorts(hedging, inv);
   renderCombinedExposure(exposure);
   renderBannerAlpha(exposure, otherExposure);
   renderPositionsTable(allPositions, goldPhysical, silverPhysical);
   renderPipelineTable(pipeline, inv, hedging);
-  renderDealsTable(deals);
+  renderDealsTable(fDeals);
   renderAgedInventory(inv.aged_parcels || []);
 
   // ── v3.0 section renders ──────────────────────────────────────────
-  const goldDeals__   = currentMetal === 'gold'   ? deals : otherDeals;
-  const silverDeals__ = currentMetal === 'silver' ? deals : otherDeals;
+  const goldDeals__   = filterByCategory(currentMetal === 'gold'   ? deals : otherDeals, currentCategory);
+  const silverDeals__ = filterByCategory(currentMetal === 'silver' ? deals : otherDeals, currentCategory);
   const goldInv__     = currentMetal === 'gold'   ? inv   : otherInv;
   const silverInv__   = currentMetal === 'silver' ? inv   : otherInv;
   const goldHedge__   = currentMetal === 'gold'   ? hedging      : otherHedging;
@@ -312,8 +376,23 @@ async function loadAll() {
   if (typeof renderSummaryCharts   === 'function') renderSummaryCharts(goldDeals__, silverDeals__, goldExp__, silverExp__);
   if (typeof renderTargetTracker   === 'function') renderTargetTracker(goldDeals__, silverDeals__, goldExp__, silverExp__, null);
   if (typeof renderTreasuryExposure=== 'function') renderTreasuryExposure(goldInv__, silverInv__, goldHedge__, silverHedge__, goldExp__, silverExp__);
-  if (typeof renderDealingGP       === 'function') renderDealingGP(deals, otherDeals, inv, otherInv);
+  if (typeof renderDealingGP       === 'function') renderDealingGP(fDeals, fOtherDeals, inv, otherInv);
   if (typeof renderBankRecon       === 'function') renderBankRecon(goldDeals__, silverDeals__);
+
+  // ── Inventory snapshot ───────────────────────────────────────────────────
+  const snapBase_ = `entity=${currentEntity}`;
+  const [gsBull_, gsProof_, ssBull_, ssProof_] = await Promise.all([
+    api(`/api/inv/snapshot?${snapBase_}&metal=gold&category=bullion`).catch(() => null),
+    api(`/api/inv/snapshot?${snapBase_}&metal=gold&category=proof`).catch(() => null),
+    api(`/api/inv/snapshot?${snapBase_}&metal=silver&category=bullion`).catch(() => null),
+    api(`/api/inv/snapshot?${snapBase_}&metal=silver&category=proof`).catch(() => null),
+  ]);
+  _invSnap = { goldBull: gsBull_, goldProof: gsProof_, silBull: ssBull_, silProof: ssProof_ };
+  if (typeof renderInventorySnapshot === 'function') renderInventorySnapshot(gsBull_, gsProof_, ssBull_, ssProof_);
+
+  _vwapCache = { deals: fDeals, otherDeals: fOtherDeals, inv, hedging, otherInv, otherHedging };
+  renderVwapBanner(fDeals, fOtherDeals, inv, hedging, otherInv, otherHedging);
+  updateBannerLayout();
 
   await loadSpot();
 }
@@ -337,12 +416,23 @@ function renderExposure(deals, inv, hedging) {
   // ZAR value is the prominent figure; oz breakdown in sub-label
   const zarValue = Math.abs(ecosystemOz) * spot;
   set('exp-value-zar', formatCurrency(zarValue));
-  set('exp-oz',        `${fmt(ecosystemOz, 2)} oz net  |  ${fmt(bullionOz, 2)} oz physical`);
-  set('exp-gp',        formatCurrency(totalGP));
-  set('exp-gp-sub',    `${deals.length} deal${deals.length !== 1 ? 's' : ''} total`);
-  set('exp-spot',      formatCurrency(spot));
+  setSubLines('exp-oz',
+    [`${fmt(ecosystemOz, 2)} oz`, 'net exposure'],
+    [`${fmt(bullionOz, 2)} oz`, 'physical ecosystem'],
+  );
+  _lastDealingGP = totalGP;
+  set('exp-gp',   formatCurrency(totalGP));
+  setSubLines('exp-gp-sub',
+    [`${deals.length}`, `deal${deals.length !== 1 ? 's' : ''} in period`],
+  );
+  updateNetGP();
+  set('exp-spot', formatCurrency(spot));
   set('exp-provision', provActive ? 'PROVISION' : 'NO PROVISION');
-  set('exp-prov-sub',  provActive ? `${provRate}% applies` : `Physical: ${fmt(bullionOz, 2)} oz`);
+  setSubLines('exp-prov-sub',
+    provActive
+      ? [`${provRate}%`, 'provision rate applies']
+      : [`${fmt(bullionOz, 2)} oz`, 'physical on hand'],
+  );
 
   const provCard = document.getElementById('exp-card-provision');
   if (provCard) {
@@ -362,7 +452,10 @@ function renderCombinedGP(currentDeals, otherDeals) {
   const totalGP  = goldGP + silverGP;
 
   set('exp-combined-gp',     formatCurrency(totalGP));
-  set('exp-combined-gp-sub', `Au ${formatCurrency(goldGP)}  |  Ag ${formatCurrency(silverGP)}`);
+  setSubLines('exp-combined-gp-sub',
+    [formatCurrency(goldGP), 'gold GP'],
+    [formatCurrency(silverGP), 'silver GP'],
+  );
 }
 
 // ─── COMBINED PNL BANNER ─────────────────────────────────────────────────────
@@ -370,9 +463,11 @@ function renderCombinedGP(currentDeals, otherDeals) {
 function renderCombinedPNL(combinedGP, combinedAlpha, goldGP, silverGP, goldAlpha, silverAlpha) {
   const totalPNL = combinedGP + combinedAlpha;
   set('exp-combined-pnl', formatCurrency(totalPNL));
-  set('exp-combined-pnl-sub',
-    `Au GP ${formatCurrency(goldGP)}  |  Ag GP ${formatCurrency(silverGP)}` +
-    `\u2003Au α ${formatCurrency(goldAlpha)}  |  Ag α ${formatCurrency(silverAlpha)}`
+  setSubLines('exp-combined-pnl-sub',
+    [formatCurrency(goldGP),    'gold dealing GP'],
+    [formatCurrency(silverGP),  'silver dealing GP'],
+    [formatCurrency(goldAlpha), 'gold treasury alpha'],
+    [formatCurrency(silverAlpha),'silver treasury alpha'],
   );
 
   const card = document.getElementById('exp-card-combined-pnl');
@@ -391,10 +486,17 @@ function renderBannerAlpha(currentExp, otherExp) {
   const silverAlpha   = currentMetal === 'silver' ? currentAlpha : otherAlpha;
   const combinedAlpha = goldAlpha + silverAlpha;
 
+  _lastTreasuryAlpha = currentAlpha;
   set('exp-alpha',     formatCurrency(currentAlpha));
-  set('exp-alpha-sub', `${currentMetal === 'gold' ? 'Au' : 'Ag'} · ${fmt((currentExp && currentExp.matched_oz) || 0, 2)} oz matched`);
+  setSubLines('exp-alpha-sub',
+    [fmt((currentExp && currentExp.matched_oz) || 0, 2) + ' oz', `${currentMetal === 'gold' ? 'gold' : 'silver'} matched hedge`],
+  );
+  updateNetGP();
   set('exp-combined-alpha',     formatCurrency(combinedAlpha));
-  set('exp-combined-alpha-sub', `Au ${formatCurrency(goldAlpha)}  |  Ag ${formatCurrency(silverAlpha)}`);
+  setSubLines('exp-combined-alpha-sub',
+    [formatCurrency(goldAlpha),   'gold treasury alpha'],
+    [formatCurrency(silverAlpha), 'silver treasury alpha'],
+  );
 
   const alphaCard = document.getElementById('exp-card-alpha');
   if (alphaCard) {
@@ -408,7 +510,162 @@ function renderBannerAlpha(currentExp, otherExp) {
   }
 }
 
+// ─── NET GP (Dealing GP + Treasury Alpha) ────────────────────────────────────
+
+function updateNetGP() {
+  const netGP = _lastDealingGP + _lastTreasuryAlpha;
+  const el = document.getElementById('exp-net-gp');
+  if (el) {
+    el.textContent = formatCurrency(netGP);
+    el.className = 'exp-value ' + (netGP >= 0 ? 'gold' : 'neg');
+  }
+  setSubLines('exp-net-gp-sub',
+    [formatCurrency(_lastDealingGP),     'dealing GP'],
+    [formatCurrency(_lastTreasuryAlpha), 'treasury alpha'],
+  );
+  const card = document.getElementById('exp-card-net-gp');
+  if (card) {
+    card.classList.toggle('alpha-positive', netGP >= 0);
+    card.classList.toggle('alpha-negative', netGP <  0);
+  }
+}
+
+// ─── BANNER LAYOUT CONTROLLER ────────────────────────────────────────────────
+// Controls card order + visibility based on: entity / metal / category / section
+
+function updateBannerLayout() {
+  const provCard          = document.getElementById('exp-card-provision');
+  const netExpCard        = document.getElementById('exp-card-net-exposure');
+  const gpCard            = document.getElementById('exp-card-gp');
+  const gpLabel           = document.getElementById('exp-label-gp');
+  const alphaCard         = document.getElementById('exp-card-alpha');
+  const vwapCard          = document.getElementById('exp-card-vwap');
+  const netGpCard         = document.getElementById('exp-card-net-gp');
+  const combinedGpCard    = document.getElementById('exp-card-combined-gp-card');
+  const combinedGpLabel   = document.getElementById('exp-label-combined-gp');
+  const combinedAlphaCard = document.getElementById('exp-card-combined-alpha');
+  const combinedPnlCard   = document.getElementById('exp-card-combined-pnl');
+  const vwapCombCard      = document.getElementById('exp-card-vwap-combined');
+
+  if (currentMetal === 'combined') {
+    // Order: 1-Provision, 2-VWAP (Au/Ag), 3-Net Exposure, 4-Combined Alpha, 5-Dealing GP, 6-Combined PNL
+    if (provCard)          provCard.style.order          = '1';
+    if (vwapCombCard)      vwapCombCard.style.order      = '2';
+    if (netExpCard)        netExpCard.style.order         = '3';
+    if (combinedAlphaCard) combinedAlphaCard.style.order = '4';
+    if (combinedGpCard)    combinedGpCard.style.order    = '5';
+    if (combinedPnlCard)   combinedPnlCard.style.order   = '6';
+    // Hide generic Total GP (Combined GP card replaces it), ensure Net GP hidden
+    if (gpCard)    gpCard.classList.add('exp-card-hidden');
+    if (netGpCard) netGpCard.classList.add('exp-card-hidden');
+    if (combinedGpLabel) combinedGpLabel.textContent = 'Dealing GP (Au + Ag)';
+    if (gpLabel)         gpLabel.textContent          = 'Total GP';
+  } else {
+    // Order: 1-Provision, 2-VWAP, 3-Net Exposure, 4-Treasury Alpha, 5-Dealing GP, 6-Net GP
+    if (provCard)   provCard.style.order   = '1';
+    if (vwapCard)   vwapCard.style.order   = '2';
+    if (netExpCard) netExpCard.style.order = '3';
+    if (alphaCard)  alphaCard.style.order  = '4';
+    if (gpCard)     gpCard.style.order     = '5';
+    if (netGpCard)  netGpCard.style.order  = '6';
+    // Show Total GP and Net GP, reset combined label
+    if (gpCard)          gpCard.classList.remove('exp-card-hidden');
+    if (netGpCard)       netGpCard.classList.remove('exp-card-hidden');
+    if (combinedGpLabel) combinedGpLabel.textContent = 'Combined GP (Au + Ag)';
+    if (gpLabel)         gpLabel.textContent          = 'Dealing GP';
+  }
+}
+
 // ─── TOP DEAL TRACKER ────────────────────────────────────────────────────────
+
+// ─── VWAP EXPOSURE BANNER CARD ────────────────────────────────────────────────
+
+function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedging) {
+  function buyVwap(subset) {
+    const buys = subset.filter(d => d.deal_type === 'buy');
+    const oz   = buys.reduce((s, d) => s + (d.oz || 0), 0);
+    const val  = buys.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
+    return { vwap: oz > 0 ? val / oz : 0, oz };
+  }
+
+  const pctVsSpot = (vwap, spot) =>
+    vwap > 0 && spot > 0 ? ((spot - vwap) / vwap) * 100 : null;
+
+  const spot = liveSpots[currentMetal === 'silver' ? 'silver' : 'gold'];
+
+  if (currentMetal === 'combined') {
+    const gDeals = (deals || []).filter(d => d.metal === 'gold');
+    const sDeals = (otherDeals || []).concat((deals || []).filter(d => d.metal === 'silver'));
+    const gv = buyVwap([...(deals||[]), ...(otherDeals||[])].filter(d => d.metal === 'gold'));
+    const sv = buyVwap([...(deals||[]), ...(otherDeals||[])].filter(d => d.metal === 'silver'));
+    const gSpot = liveSpots.gold, sSpot = liveSpots.silver;
+    const gPct  = pctVsSpot(gv.vwap, gSpot);
+    const sPct  = pctVsSpot(sv.vwap, sSpot);
+    const gEco  = (gInv_?.total_oz || 0) + ((gHedge_?.net_oz) || 0);
+    const sEco  = (sInv_?.total_oz || 0) + ((sHedge_?.net_oz) || 0);
+
+    set('exp-vwap-combined-val',
+      [gv.vwap > 0 ? `Au ${formatCurrency(gv.vwap)}` : '', sv.vwap > 0 ? `Ag ${formatCurrency(sv.vwap)}` : '']
+        .filter(Boolean).join(' / ') || '–'
+    );
+    setSubLines('exp-vwap-combined-sub',
+      gv.vwap > 0 ? [`${fmt(gEco, 2)} oz`, 'gold net exposed'] : null,
+      gPct != null ? [
+        (gPct >= 0 ? '+' : '') + fmt(gPct, 2) + '%',
+        `gold VWAP vs spot (${formatCurrency(gSpot)})`
+      ] : null,
+      sv.vwap > 0 ? [`${fmt(sEco, 2)} oz`, 'silver net exposed'] : null,
+      sPct != null ? [
+        (sPct >= 0 ? '+' : '') + fmt(sPct, 2) + '%',
+        `silver VWAP vs spot (${formatCurrency(sSpot)})`
+      ] : null,
+    );
+
+    const card = document.getElementById('exp-card-vwap-combined');
+    if (card) {
+      card.classList.toggle('alpha-positive', (gPct || 0) >= 0);
+      card.classList.toggle('alpha-negative', (gPct || 0) < 0);
+    }
+    return;
+  }
+
+  // Single metal
+  const metal    = currentMetal;
+  const metalLbl = metal === 'gold' ? 'gold' : 'silver';
+  const ecoOz    = (inv?.total_oz || 0) + (hedging?.net_oz || 0);
+  const isShort  = ecoOz < 0;
+
+  // Use sell VWAP when net short, buy VWAP when net long
+  function sideVwap(subset, side) {
+    const filtered = subset.filter(d => d.deal_type === side);
+    const oz  = filtered.reduce((s, d) => s + (d.oz || 0), 0);
+    const val = filtered.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
+    return { vwap: oz > 0 ? val / oz : 0 };
+  }
+  const { vwap } = isShort ? sideVwap(deals || [], 'sell') : buyVwap(deals || []);
+
+  const pct    = pctVsSpot(vwap, spot);
+  const pctStr = pct != null ? (pct >= 0 ? '+' : '') + fmt(pct, 2) + '%' : '–';
+
+  const catSuffix  = currentCategory === 'bullion' ? ' bullion' : currentCategory === 'proof' ? ' proof' : '';
+  const vwapLabel  = (isShort ? 'Sell VWAP' : 'Buy VWAP') + (catSuffix ? ' ·' + catSuffix : '');
+
+  set('exp-vwap-label', vwapLabel);
+  set('exp-vwap-val',   vwap > 0 ? formatCurrency(vwap) : '–');
+  setSubLines('exp-vwap-sub',
+    [`${fmt(ecoOz, 2)} oz`, `${metalLbl}${catSuffix} net exposed`],
+    vwap > 0 ? [pctStr, `vs spot (${formatCurrency(spot)})`] : null,
+  );
+
+  const card = document.getElementById('exp-card-vwap');
+  if (card) {
+    card.classList.remove('alpha-positive', 'alpha-negative');
+    if (pct != null) card.classList.add(pct >= 0 ? 'alpha-positive' : 'alpha-negative');
+  }
+}
+
+// Module refs for combined VWAP (set during loadAll combined mode)
+let gInv_, sInv_, gHedge_, sHedge_;
 
 function renderTopDeal(deals) {
   const section = document.getElementById('top-deal-section');
@@ -1038,6 +1295,84 @@ function formatDate(iso) {
   } catch { return iso; }
 }
 
+// ─── INVENTORY SNAPSHOT ───────────────────────────────────────────────────────
+
+function renderInventorySnapshot(goldBull, goldProof, silBull, silProof) {
+  function buildRows(tbody, tfoot, items) {
+    tbody.innerHTML = '';
+    let totalEaches = 0, totalOz = 0;
+
+    const nonZero = Object.values(items).filter(it => (it.closing_eaches || 0) !== 0);
+    if (!nonZero.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">No stock on hand</td></tr>';
+    }
+
+    nonZero.forEach(it => {
+        totalEaches += it.closing_eaches || 0;
+        totalOz     += it.closing_oz     || 0;
+        const recon = it.recon_match === null ? '–' : it.recon_match ? '✓' : '✗';
+        const reconCls = it.recon_match === null ? '' : it.recon_match ? 'recon-ok' : 'recon-fail';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${it.product_name}</td>
+          <td style="color:var(--muted);font-size:11px">${it._category || ''}</td>
+          <td class="num">${fmt(it.closing_eaches, 0)}</td>
+          <td class="num">${fmt(it.closing_oz, 3)}</td>
+          <td class="num" style="color:var(--muted)">${fmt(it.threshold_stock, 0)}</td>
+          <td class="num">${fmt(it.available_to_sell, 0)}</td>
+          <td class="num" style="color:var(--muted)">${it.sage_eaches !== null ? fmt(it.sage_eaches, 0) : '–'}</td>
+          <td class="num ${reconCls}">${recon}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+    tfoot.innerHTML = `
+      <tr class="inv-totals-row">
+        <td colspan="2"><strong>Total</strong></td>
+        <td class="num"><strong>${fmt(totalEaches, 0)}</strong></td>
+        <td class="num"><strong>${fmt(totalOz, 3)}</strong></td>
+        <td colspan="4"></td>
+      </tr>
+    `;
+  }
+
+  // Merge items respecting the currentCategory filter
+  function mergeItems(bull, proof) {
+    const merged = {};
+    if (currentCategory !== 'proof'   && bull  && bull.items)
+      Object.entries(bull.items).forEach(([k, v])  => { merged[k] = { ...v, _category: 'Bullion' }; });
+    if (currentCategory !== 'bullion' && proof && proof.items)
+      Object.entries(proof.items).forEach(([k, v]) => { merged[k] = { ...v, _category: 'Proof'   }; });
+    return merged;
+  }
+
+  const goldTbody = document.getElementById('inv-gold-tbody');
+  const goldTfoot = document.getElementById('inv-gold-tfoot');
+  const silTbody  = document.getElementById('inv-silver-tbody');
+  const silTfoot  = document.getElementById('inv-silver-tfoot');
+
+  if (goldTbody && goldTfoot) {
+    buildRows(goldTbody, goldTfoot, mergeItems(goldBull, goldProof));
+  }
+  if (silTbody && silTfoot) {
+    buildRows(silTbody, silTfoot, mergeItems(silBull, silProof));
+  }
+
+  // Hedge exposure cards
+  const goldEco = (goldBull && goldBull.ecosystem) || {};
+  const silEco  = (silBull  && silBull.ecosystem)  || {};
+
+  function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+  setEl('inv-gold-physical-oz',  `${fmt(goldEco.total_inv_oz        || 0, 3)} oz`);
+  setEl('inv-gold-sam-oz',       `${fmt(goldEco.sam_hedged_oz       || 0, 3)} oz`);
+  setEl('inv-gold-sx-oz',        `${fmt(goldEco.sx_hedged_oz        || 0, 3)} oz`);
+  setEl('inv-gold-net-oz',       `${fmt(goldEco.ecosystem_oz        || 0, 3)} oz`);
+  setEl('inv-silver-physical-oz',`${fmt(silEco.total_inv_oz         || 0, 3)} oz`);
+  setEl('inv-silver-sam-oz',     `${fmt(silEco.sam_hedged_oz        || 0, 3)} oz`);
+  setEl('inv-silver-sx-oz',      `${fmt(silEco.sx_hedged_oz         || 0, 3)} oz`);
+  setEl('inv-silver-net-oz',     `${fmt(silEco.ecosystem_oz         || 0, 3)} oz`);
+}
+
 // ─── AGED INVENTORY ───────────────────────────────────────────────────────────
 
 function renderAgedInventory(parcels) {
@@ -1087,6 +1422,15 @@ async function loadSpot() {
   if (spotEl && !spotEl.dataset.manuallySet) {
     // combined mode defaults to gold spot in the preview panel
     spotEl.value = (currentMetal === 'gold' || currentMetal === 'combined') ? gold : silver;
+  }
+
+  // Re-render VWAP banner so % vs spot stays live after price refresh
+  if (_vwapCache.deals || _vwapCache.otherDeals) {
+    renderVwapBanner(
+      _vwapCache.deals, _vwapCache.otherDeals,
+      _vwapCache.inv, _vwapCache.hedging,
+      _vwapCache.otherInv, _vwapCache.otherHedging
+    );
   }
 }
 
@@ -1622,24 +1966,63 @@ function doughnutOptions(title) {
   };
 }
 
+let siloChartSummary;
+
 function renderSiloChart(data) {
   const canvas = document.getElementById('silo-chart');
   const ctx    = canvas?.getContext('2d');
-  if (!ctx) return;
-  const labels = Object.keys(data);
-  const values = labels.map(k => data[k].gp_proportion_pct || 0);
-
-  if (!labels.length || values.every(v => v === 0)) {
-    emptyChartNote(canvas); if (siloChart) { siloChart.destroy(); siloChart = null; } return;
+  if (ctx) {
+    const labels = Object.keys(data);
+    const values = labels.map(k => data[k].gp_proportion_pct || 0);
+    if (!labels.length || values.every(v => v === 0)) {
+      emptyChartNote(canvas); if (siloChart) { siloChart.destroy(); siloChart = null; }
+    } else {
+      clearEmptyNote(canvas);
+      if (siloChart) siloChart.destroy();
+      siloChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: BRAND_COLORS, borderWidth: 2, borderColor: '#150E26', hoverOffset: 8 }] },
+        options: doughnutOptions(),
+      });
+    }
   }
-  clearEmptyNote(canvas);
 
-  if (siloChart) siloChart.destroy();
-  siloChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data: values, backgroundColor: BRAND_COLORS, borderWidth: 2, borderColor: '#150E26', hoverOffset: 8 }] },
-    options: doughnutOptions(),
-  });
+  // Also render summary silo chart + table
+  const sc = document.getElementById('silo-chart-summary');
+  if (sc) {
+    const labels = Object.keys(data);
+    const values = labels.map(k => data[k].gp_proportion_pct || 0);
+    if (siloChartSummary) siloChartSummary.destroy();
+    if (labels.length && !values.every(v => v === 0)) {
+      siloChartSummary = new Chart(sc, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: BRAND_COLORS, borderWidth: 2, borderColor: '#150E26', hoverOffset: 8 }] },
+        options: { ...doughnutOptions(), plugins: { ...doughnutOptions().plugins, legend: { position: 'bottom', labels: { color: 'rgba(240,238,248,0.6)', font: { size: 10 }, boxWidth: 10 } } } },
+      });
+    }
+  }
+  const tbody = document.getElementById('silo-summary-tbody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    const silos = Object.entries(data).sort((a, b) => (b[1].gp_zar || 0) - (a[1].gp_zar || 0));
+    const totalGP = silos.reduce((s, [, v]) => s + (v.gp_zar || 0), 0);
+    silos.forEach(([silo, v]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${silo || '(unclassified)'}</td>
+        <td class="num">${v.count || 0}</td>
+        <td class="num" style="color:var(--gold)">${formatCurrency(v.gp_zar || 0)}</td>
+        <td class="num">${fmt(v.gp_proportion_pct || 0, 1)}%</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    if (silos.length) {
+      const tfoot = document.createElement('tr');
+      tfoot.className = 'silo-total-row';
+      tfoot.innerHTML = `<td><strong>Total</strong></td><td class="num">${silos.reduce((s, [, v]) => s + (v.count || 0), 0)}</td><td class="num" style="color:var(--gold)"><strong>${formatCurrency(totalGP)}</strong></td><td class="num">100%</td>`;
+      tbody.appendChild(tfoot);
+    }
+  }
 }
 
 function renderChannelChart(data) {
@@ -1684,6 +2067,16 @@ async function api(path, opts = {}) {
 function set(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
+}
+
+// Render labeled sub-lines: setSubLines('id', ['value', 'label'], ['value2', 'label2'], ...)
+// Null entries are skipped.
+function setSubLines(id, ...pairs) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = pairs.filter(p => p != null).map(([val, lbl]) =>
+    `<span class="sub-line"><span class="sub-val">${val}</span>&ensp;${lbl}</span>`
+  ).join('');
 }
 
 function fmt(val, decimals = 2) {

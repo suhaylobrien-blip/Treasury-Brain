@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Treasury Brain — SA Bullion</title>
   <meta name="theme-color" content="#1C1E45" />
-  <link rel="stylesheet" href="style.css?v=4" />
-  <link rel="stylesheet" href="_v3_styles.css?v=1" />
+  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="stylesheet" href="_v3_styles.css?v=2" />
   <link rel="stylesheet" href="_v3_tracker.css?v=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -36,6 +36,17 @@
   <button class="tab"        onclick="switchMetal('silver',   this)">Silver</button>
   <button class="tab tab-combined" onclick="switchMetal('combined', this)">Combined</button>
 </nav>
+<nav class="category-tabs">
+  <button class="cat-tab active" onclick="switchCategory('all',     this)">All</button>
+  <button class="cat-tab"        onclick="switchCategory('bullion', this)">Bullion</button>
+  <button class="cat-tab"        onclick="switchCategory('proof',   this)">Proof</button>
+</nav>
+<nav class="section-tabs-top">
+  <button class="stab active" onclick="switchSection('summary',   this)">Summary</button>
+  <button class="stab"        onclick="switchSection('dealing',   this)">Dealing</button>
+  <button class="stab"        onclick="switchSection('treasury',  this)">Treasury</button>
+  <button class="stab"        onclick="switchSection('inventory', this)">Inventory</button>
+</nav>
 
 <!-- ── GLOBAL TARGET TRACKER (always visible) ── -->
 <div class="target-tracker">
@@ -44,7 +55,7 @@
     <div class="tt-val" id="tt-period-pnl">–</div>
   </div>
   <div class="tt-block">
-    <div class="tt-label">Req. Daily Rate</div>
+    <div class="tt-label" id="tt-rate-label">Req. Daily Rate</div>
     <div class="tt-val" id="tt-daily-target">–</div>
   </div>
   <div class="tt-block">
@@ -100,20 +111,20 @@
       <div class="exp-sub"   id="exp-prov-sub">–</div>
     </div>
 
-    <div class="exp-card">
+    <div class="exp-card" id="exp-card-net-exposure">
       <div class="exp-label">Net Exposure</div>
       <div class="exp-value" id="exp-value-zar">–</div>
       <div class="exp-sub"   id="exp-oz">–</div>
     </div>
 
-    <div class="exp-card highlight">
-      <div class="exp-label">Total GP</div>
+    <div class="exp-card highlight" id="exp-card-gp">
+      <div class="exp-label" id="exp-label-gp">Total GP</div>
       <div class="exp-value gold" id="exp-gp">–</div>
       <div class="exp-sub"        id="exp-gp-sub">–</div>
     </div>
 
-    <div class="exp-card combined-only">
-      <div class="exp-label">Combined GP (Au + Ag)</div>
+    <div class="exp-card combined-only" id="exp-card-combined-gp-card">
+      <div class="exp-label" id="exp-label-combined-gp">Combined GP (Au + Ag)</div>
       <div class="exp-value gold" id="exp-combined-gp">–</div>
       <div class="exp-sub"        id="exp-combined-gp-sub">–</div>
     </div>
@@ -136,28 +147,25 @@
       <div class="exp-sub"   id="exp-combined-pnl-sub">–</div>
     </div>
 
-    <div class="exp-card opening-pos-card">
-      <div class="exp-label">Opening Position</div>
-      <div class="opening-pos-row">
-        <input type="number" id="opening-pos-input" step="any"
-               placeholder="e.g. −500" title="Set ecosystem oz position (negative = short)" />
-        <span class="opening-pos-unit">oz</span>
-      </div>
-      <button class="btn-set-pos" onclick="setOpeningPosition()">Set</button>
-      <div class="exp-sub" id="opening-pos-sub">Ecosystem starting position</div>
+    <div class="exp-card vwap-tracker-card single-metal-only" id="exp-card-vwap">
+      <div class="exp-label" id="exp-vwap-label">Buy VWAP</div>
+      <div class="exp-value" id="exp-vwap-val">–</div>
+      <div class="exp-sub"   id="exp-vwap-sub"></div>
+    </div>
+
+    <div class="exp-card vwap-tracker-card combined-only" id="exp-card-vwap-combined">
+      <div class="exp-label">Buy VWAP (Au / Ag)</div>
+      <div class="exp-value" id="exp-vwap-combined-val">–</div>
+      <div class="exp-sub"   id="exp-vwap-combined-sub"></div>
+    </div>
+
+    <div class="exp-card highlight single-metal-only exp-card-hidden" id="exp-card-net-gp">
+      <div class="exp-label">Net GP</div>
+      <div class="exp-value gold" id="exp-net-gp">–</div>
+      <div class="exp-sub"        id="exp-net-gp-sub"></div>
     </div>
 
   </section>
-
-  <!-- ═══════════════════════════════════════════
-       SECTION TABS
-  ═══════════════════════════════════════════ -->
-  <nav class="section-tabs">
-    <button class="stab active" onclick="switchSection('summary',   this)">Summary</button>
-    <button class="stab"        onclick="switchSection('dealing',   this)">Dealing</button>
-    <button class="stab"        onclick="switchSection('treasury',  this)">Treasury</button>
-    <button class="stab"        onclick="switchSection('inventory', this)">Inventory</button>
-  </nav>
 
   <!-- ═══════════════════════════════════════════════════════════
        SUMMARY PANE
@@ -212,12 +220,60 @@
       </section>
     </div>
 
+    <!-- GP SILO TRACKER -->
+    <div class="silo-tracker-row">
+      <section class="card silo-tracker-chart-card">
+        <h2>GP by Silo</h2>
+        <canvas id="silo-chart-summary" height="160"></canvas>
+      </section>
+      <section class="card silo-tracker-table-card">
+        <h2>Silo Breakdown</h2>
+        <table class="silo-table">
+          <thead>
+            <tr><th>Silo</th><th class="num">Deals</th><th class="num">GP (ZAR)</th><th class="num">Share %</th></tr>
+          </thead>
+          <tbody id="silo-summary-tbody"></tbody>
+        </table>
+      </section>
+    </div>
+
   </div><!-- /pane-summary -->
 
   <!-- ═══════════════════════════════════════════════════════════
        DEALING PANE
   ═══════════════════════════════════════════════════════════ -->
   <div class="section-pane hidden" id="pane-dealing">
+
+    <!-- TOP DEAL OF THE PERIOD -->
+    <section class="card full-width top-deal-card" id="top-deal-section" style="display:none">
+      <h2>Top Deal of the Period</h2>
+      <div class="top-deal-grid">
+        <div class="top-deal-item">
+          <div class="top-deal-label">Dealer / Source</div>
+          <div class="top-deal-val" id="top-deal-dealer">–</div>
+        </div>
+        <div class="top-deal-item">
+          <div class="top-deal-label">Product</div>
+          <div class="top-deal-val" id="top-deal-product">–</div>
+        </div>
+        <div class="top-deal-item">
+          <div class="top-deal-label">Type</div>
+          <div class="top-deal-val" id="top-deal-type">–</div>
+        </div>
+        <div class="top-deal-item">
+          <div class="top-deal-label">Volume</div>
+          <div class="top-deal-val" id="top-deal-oz">–</div>
+        </div>
+        <div class="top-deal-item">
+          <div class="top-deal-label">GP Contribution</div>
+          <div class="top-deal-val gold" id="top-deal-gp">–</div>
+        </div>
+        <div class="top-deal-item">
+          <div class="top-deal-label">Share of Total GP</div>
+          <div class="top-deal-val" id="top-deal-share">–</div>
+        </div>
+      </div>
+    </section>
 
     <!-- BUYBACKS + SALES -->
     <div class="trading-grid">
@@ -428,7 +484,7 @@
     <!-- ALL DEALS TABLE -->
     <section class="card full-width">
       <div class="card-header">
-        <h2>Deals <span id="deals-count-label" class="count-label"></span></h2>
+        <h2><span id="deals-heading">Deals</span> <span id="deals-count-label" class="count-label"></span></h2>
         <div style="display:flex;gap:8px;align-items:center;">
           <label class="upload-label">
             Upload Dealer Sheet
@@ -480,6 +536,69 @@
         </table>
       </div>
     </section>
+
+    <!-- MARGIN CALCULATORS -->
+    <div class="calc-grid">
+
+      <section class="card calc-card">
+        <h2>Gold Margin Calc</h2>
+        <div class="calc-mode-row">
+          <label class="calc-mode-label">
+            <input type="radio" name="gold-calc-mode" value="simple" checked onchange="goldCalcMode='simple';runGoldCalc()"> KR / Fixed price
+          </label>
+          <label class="calc-mode-label">
+            <input type="radio" name="gold-calc-mode" value="vat" onchange="goldCalcMode='vat';runGoldCalc()"> Minted bar (VAT incl)
+          </label>
+        </div>
+        <div class="calc-body">
+          <div class="calc-row">
+            <label>Spot (R/oz)<input type="number" id="gc-spot" step="any" placeholder="e.g. 78000" oninput="runGoldCalc()" /></label>
+            <label>Margin %<input type="number" id="gc-margin" step="0.01" placeholder="e.g. 3.75" oninput="runGoldCalc()" /></label>
+            <label id="gc-uom-wrap">Oz / Unit<input type="number" id="gc-oz" step="any" value="1" oninput="runGoldCalc()" /></label>
+          </div>
+          <div class="calc-result" id="gc-result">—</div>
+          <div class="calc-divider"></div>
+          <div class="calc-row">
+            <label>Unit Price (R)<input type="number" id="gc-price-in" step="any" placeholder="Given price" oninput="runGoldCalcBack()" /></label>
+            <label>Back-calc<select id="gc-back-mode" onchange="runGoldCalcBack()">
+              <option value="margin">→ Margin</option>
+              <option value="spot">→ Spot</option>
+            </select></label>
+          </div>
+          <div class="calc-result" id="gc-result-back">—</div>
+        </div>
+      </section>
+
+      <section class="card calc-card">
+        <h2>Silver Margin Calc</h2>
+        <div class="calc-mode-row">
+          <label class="calc-mode-label">
+            <input type="radio" name="silver-calc-mode" value="coin" checked onchange="silverCalcMode='coin';runSilverCalc()"> 1oz coin / bar
+          </label>
+          <label class="calc-mode-label">
+            <input type="radio" name="silver-calc-mode" value="kilo" onchange="silverCalcMode='kilo';runSilverCalc()"> Kilobar (32.151oz)
+          </label>
+        </div>
+        <div class="calc-body">
+          <div class="calc-row">
+            <label>Spot (R/oz)<input type="number" id="sc-spot" step="any" placeholder="e.g. 1230" oninput="runSilverCalc()" /></label>
+            <label>Margin %<input type="number" id="sc-margin" step="0.01" placeholder="e.g. 15.0" oninput="runSilverCalc()" /></label>
+            <label id="sc-uom-wrap">Oz / Unit<input type="number" id="sc-oz" step="any" value="1" oninput="runSilverCalc()" /></label>
+          </div>
+          <div class="calc-result" id="sc-result">—</div>
+          <div class="calc-divider"></div>
+          <div class="calc-row">
+            <label>Unit Price VAT Incl (R)<input type="number" id="sc-price-in" step="any" placeholder="Given price" oninput="runSilverCalcBack()" /></label>
+            <label>Back-calc<select id="sc-back-mode" onchange="runSilverCalcBack()">
+              <option value="margin">→ Margin</option>
+              <option value="spot">→ Spot</option>
+            </select></label>
+          </div>
+          <div class="calc-result" id="sc-result-back">—</div>
+        </div>
+      </section>
+
+    </div>
 
   </div><!-- /pane-dealing -->
 
@@ -881,33 +1000,81 @@
   ═══════════════════════════════════════════════════════════ -->
   <div class="section-pane hidden" id="pane-inventory">
 
-    <!-- TOP DEAL OF THE DAY -->
-    <section class="card full-width top-deal-card" id="top-deal-section" style="display:none">
-      <h2>Top Deal of the Period</h2>
-      <div class="top-deal-grid">
-        <div class="top-deal-item">
-          <div class="top-deal-label">Dealer / Source</div>
-          <div class="top-deal-val" id="top-deal-dealer">–</div>
+    <!-- INVENTORY SNAPSHOT -->
+    <section class="card full-width" id="inv-snapshot-section">
+      <h2>Inventory on Hand</h2>
+
+      <!-- GOLD -->
+      <div class="inv-metal-block">
+        <div class="inv-metal-header inv-gold-header">Gold</div>
+        <div class="table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th>Product</th><th>Category</th>
+                <th class="num">Eaches</th><th class="num">Oz</th>
+                <th class="num">Threshold (40%)</th><th class="num">Available to Sell</th>
+                <th class="num">Sage Balance</th><th class="num">Recon</th>
+              </tr>
+            </thead>
+            <tbody id="inv-gold-tbody"></tbody>
+            <tfoot id="inv-gold-tfoot"></tfoot>
+          </table>
         </div>
-        <div class="top-deal-item">
-          <div class="top-deal-label">Product</div>
-          <div class="top-deal-val" id="top-deal-product">–</div>
+      </div>
+
+      <!-- SILVER -->
+      <div class="inv-metal-block" style="margin-top:16px">
+        <div class="inv-metal-header inv-silver-header">Silver</div>
+        <div class="table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th>Product</th><th>Category</th>
+                <th class="num">Eaches</th><th class="num">Oz</th>
+                <th class="num">Threshold (40%)</th><th class="num">Available to Sell</th>
+                <th class="num">Sage Balance</th><th class="num">Recon</th>
+              </tr>
+            </thead>
+            <tbody id="inv-silver-tbody"></tbody>
+            <tfoot id="inv-silver-tfoot"></tfoot>
+          </table>
         </div>
-        <div class="top-deal-item">
-          <div class="top-deal-label">Type</div>
-          <div class="top-deal-val" id="top-deal-type">–</div>
+      </div>
+
+      <!-- HEDGE NET EXPOSURE -->
+      <div class="inv-hedge-row">
+        <div class="inv-hedge-card">
+          <div class="inv-hedge-label">Gold Physical</div>
+          <div class="inv-hedge-val gold-text" id="inv-gold-physical-oz">– oz</div>
         </div>
-        <div class="top-deal-item">
-          <div class="top-deal-label">Volume</div>
-          <div class="top-deal-val" id="top-deal-oz">–</div>
+        <div class="inv-hedge-card">
+          <div class="inv-hedge-label">Gold SAM Net</div>
+          <div class="inv-hedge-val" id="inv-gold-sam-oz">– oz</div>
         </div>
-        <div class="top-deal-item">
-          <div class="top-deal-label">GP Contribution</div>
-          <div class="top-deal-val gold" id="top-deal-gp">–</div>
+        <div class="inv-hedge-card">
+          <div class="inv-hedge-label">Gold StoneX Net</div>
+          <div class="inv-hedge-val" id="inv-gold-sx-oz">– oz</div>
         </div>
-        <div class="top-deal-item">
-          <div class="top-deal-label">Share of Total GP</div>
-          <div class="top-deal-val" id="top-deal-share">–</div>
+        <div class="inv-hedge-card inv-net-exposure">
+          <div class="inv-hedge-label">Gold Net Exposure</div>
+          <div class="inv-hedge-val gold-text" id="inv-gold-net-oz">– oz</div>
+        </div>
+        <div class="inv-hedge-card">
+          <div class="inv-hedge-label">Silver Physical</div>
+          <div class="inv-hedge-val" id="inv-silver-physical-oz">– oz</div>
+        </div>
+        <div class="inv-hedge-card">
+          <div class="inv-hedge-label">Silver SAM Net</div>
+          <div class="inv-hedge-val" id="inv-silver-sam-oz">– oz</div>
+        </div>
+        <div class="inv-hedge-card">
+          <div class="inv-hedge-label">Silver StoneX Net</div>
+          <div class="inv-hedge-val" id="inv-silver-sx-oz">– oz</div>
+        </div>
+        <div class="inv-hedge-card inv-net-exposure">
+          <div class="inv-hedge-label">Silver Net Exposure</div>
+          <div class="inv-hedge-val" id="inv-silver-net-oz">– oz</div>
         </div>
       </div>
     </section>
@@ -928,76 +1095,13 @@
       </div>
     </section>
 
-    <!-- MARGIN CALCULATORS -->
-    <div class="calc-grid">
-
-      <section class="card calc-card">
-        <h2>Gold Margin Calc</h2>
-        <div class="calc-mode-row">
-          <label class="calc-mode-label">
-            <input type="radio" name="gold-calc-mode" value="simple" checked onchange="goldCalcMode='simple';runGoldCalc()"> KR / Fixed price
-          </label>
-          <label class="calc-mode-label">
-            <input type="radio" name="gold-calc-mode" value="vat" onchange="goldCalcMode='vat';runGoldCalc()"> Minted bar (VAT incl)
-          </label>
-        </div>
-        <div class="calc-body">
-          <div class="calc-row">
-            <label>Spot (R/oz)<input type="number" id="gc-spot" step="any" placeholder="e.g. 78000" oninput="runGoldCalc()" /></label>
-            <label>Margin %<input type="number" id="gc-margin" step="0.01" placeholder="e.g. 3.75" oninput="runGoldCalc()" /></label>
-            <label id="gc-uom-wrap">Oz / Unit<input type="number" id="gc-oz" step="any" value="1" oninput="runGoldCalc()" /></label>
-          </div>
-          <div class="calc-result" id="gc-result">—</div>
-          <div class="calc-divider"></div>
-          <div class="calc-row">
-            <label>Unit Price (R)<input type="number" id="gc-price-in" step="any" placeholder="Given price" oninput="runGoldCalcBack()" /></label>
-            <label>Back-calc<select id="gc-back-mode" onchange="runGoldCalcBack()">
-              <option value="margin">→ Margin</option>
-              <option value="spot">→ Spot</option>
-            </select></label>
-          </div>
-          <div class="calc-result" id="gc-result-back">—</div>
-        </div>
-      </section>
-
-      <section class="card calc-card">
-        <h2>Silver Margin Calc</h2>
-        <div class="calc-mode-row">
-          <label class="calc-mode-label">
-            <input type="radio" name="silver-calc-mode" value="coin" checked onchange="silverCalcMode='coin';runSilverCalc()"> 1oz coin / bar
-          </label>
-          <label class="calc-mode-label">
-            <input type="radio" name="silver-calc-mode" value="kilo" onchange="silverCalcMode='kilo';runSilverCalc()"> Kilobar (32.151oz)
-          </label>
-        </div>
-        <div class="calc-body">
-          <div class="calc-row">
-            <label>Spot (R/oz)<input type="number" id="sc-spot" step="any" placeholder="e.g. 1230" oninput="runSilverCalc()" /></label>
-            <label>Margin %<input type="number" id="sc-margin" step="0.01" placeholder="e.g. 15.0" oninput="runSilverCalc()" /></label>
-            <label id="sc-uom-wrap">Oz / Unit<input type="number" id="sc-oz" step="any" value="1" oninput="runSilverCalc()" /></label>
-          </div>
-          <div class="calc-result" id="sc-result">—</div>
-          <div class="calc-divider"></div>
-          <div class="calc-row">
-            <label>Unit Price VAT Incl (R)<input type="number" id="sc-price-in" step="any" placeholder="Given price" oninput="runSilverCalcBack()" /></label>
-            <label>Back-calc<select id="sc-back-mode" onchange="runSilverCalcBack()">
-              <option value="margin">→ Margin</option>
-              <option value="spot">→ Spot</option>
-            </select></label>
-          </div>
-          <div class="calc-result" id="sc-result-back">—</div>
-        </div>
-      </section>
-
-    </div>
-
   </div><!-- /pane-inventory -->
 
 </main>
 
 <script src="_v3_new_functions.js?v=1"></script>
 <script src="_v3_charts.js?v=1"></script>
-<script src="_v3_tracker.js?v=1"></script>
-<script src="dashboard.js?v=5"></script>
+<script src="_v3_tracker.js?v=2"></script>
+<script src="dashboard.js?v=12"></script>
 </body>
 </html>

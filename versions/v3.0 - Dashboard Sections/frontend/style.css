@@ -118,6 +118,36 @@ header {
 }
 .metal-tabs { padding-top: 6px; padding-bottom: 2px; }
 
+/* Category filter tabs (Bullion / Proof) */
+.category-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 28px;
+  background: rgba(11,7,23,0.95);
+  border-bottom: 1px solid var(--border);
+}
+.cat-tab {
+  padding: 5px 16px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  border-radius: 6px 6px 0 0;
+  transition: all .2s;
+}
+.cat-tab:hover { color: var(--text); border-color: var(--border); }
+.cat-tab.active {
+  background: rgba(107,57,175,0.15);
+  color: var(--purple-lt);
+  border-color: rgba(107,57,175,0.35);
+  border-bottom-color: rgba(11,7,23,0.95);
+}
+
 .tab {
   padding: 8px 20px;
   border: 1px solid transparent;
@@ -146,9 +176,10 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 /* ── EXPOSURE BANNER ────────────────────────────────────────────────────── */
 .exposure-banner {
   display: grid;
-  grid-template-columns: repeat(5, 1fr) 220px;
+  grid-template-columns: repeat(6, 1fr);
   gap: 12px;
 }
+.exp-card-hidden { display: none !important; }
 
 .exp-card {
   background: var(--surface);
@@ -198,9 +229,23 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
 }
 .exp-value.gold { color: var(--gold); }
 .exp-sub {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   font-weight: 400;
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sub-line {
+  display: block;
+  line-height: 1.4;
+}
+.sub-val {
+  color: rgba(240,238,248,0.8);
+  font-weight: 600;
+  font-family: var(--font-head);
+  font-size: 12px;
 }
 
 /* ── OPENING POSITION CARD ───────────────────────────────────────────────── */
@@ -343,6 +388,23 @@ main { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
   color: var(--text);
   font-family: var(--font-head);
 }
+
+/* Card-type accent colors on stat values */
+.buy-header   ~ .tc-stats .tc-stat-val { color: var(--green); }
+.sell-header  ~ .tc-stats .tc-stat-val { color: var(--gold); }
+.hedge-header ~ .tc-stats .tc-stat-val { color: var(--purple-lt); }
+.long-header  ~ .tc-stats .tc-stat-val { color: var(--green); }
+.short-header ~ .tc-stats .tc-stat-val { color: var(--red); }
+
+/* Also color the VWAP hero values to match their card */
+.buy-header   ~ .tc-vwap-row .tc-vwap-val { color: var(--green); }
+.sell-header  ~ .tc-vwap-row .tc-vwap-val { color: var(--gold); }
+.hedge-header ~ .tc-vwap-row .tc-vwap-val { color: var(--purple-lt); }
+.long-header  ~ .tc-vwap-row .tc-vwap-val { color: var(--green); }
+.short-header ~ .tc-vwap-row .tc-vwap-val { color: var(--red); }
+
+/* Stat label — slightly more visible */
+.tc-stat-label { font-size: 11px; color: rgba(240,238,248,0.55); font-weight: 500; }
 
 /* HEDGING */
 .hedge-rows { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
@@ -1100,3 +1162,103 @@ body.metal-filter-combined .metal-col { display: table-cell !important; }
 /* Hedge add-form metal selector — only shown in combined mode */
 .h-metal-row { display: none; }
 body.metal-filter-combined .h-metal-row { display: flex; }
+
+/* ── INVENTORY SNAPSHOT ──────────────────────────────────────────────────── */
+.inv-metal-block { margin-bottom: 8px; }
+
+.inv-metal-header {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+.inv-gold-header   { color: var(--gold);  background: rgba(212,167,85,0.10);  border: 1px solid rgba(212,167,85,0.25); }
+.inv-silver-header { color: #9DB8CC;      background: rgba(150,180,200,0.10); border: 1px solid rgba(150,180,200,0.25); }
+
+.inv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.inv-table th {
+  text-align: left;
+  color: rgba(240,238,248,0.45);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.inv-table th.num, .inv-table td.num { text-align: right; }
+.inv-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(107,57,175,0.08);
+  color: var(--text);
+}
+.inv-table tbody tr:hover { background: rgba(107,57,175,0.07); }
+.inv-table tfoot td { padding: 8px; border-top: 1px solid var(--border); background: rgba(107,57,175,0.06); }
+
+.recon-ok   { color: var(--green); font-weight: 700; }
+.recon-fail { color: var(--red);   font-weight: 700; }
+.inv-totals-row td { font-size: 12px; }
+
+/* Hedge exposure row */
+.inv-hedge-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+.inv-hedge-card {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.inv-hedge-card.inv-net-exposure {
+  border-color: rgba(107,57,175,0.45);
+  background: rgba(107,57,175,0.10);
+}
+.inv-hedge-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.inv-hedge-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.gold-text { color: var(--gold); }
+
+/* ── SILO TRACKER (summary pane) ─────────────────────────────────────────── */
+.silo-tracker-row {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+.silo-tracker-chart-card canvas { max-height: 200px; }
+.silo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.silo-table th {
+  text-align: left;
+  color: rgba(240,238,248,0.45);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.silo-table th.num, .silo-table td.num { text-align: right; }
+.silo-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid rgba(107,57,175,0.08);
+  color: var(--text);
+}
+.silo-table tbody tr:hover { background: rgba(107,57,175,0.07); }
+.silo-table .silo-total-row td { border-top: 1px solid var(--border); font-weight: 700; }
