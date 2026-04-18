@@ -105,13 +105,26 @@ def deals_endpoint():
 
 @app.route('/api/inventory')
 def inventory_endpoint():
-    """Return current inventory for a given entity + metal."""
+    """Return current live inventory for a given entity + metal.
+    Live oz = base position (manually reconciled) + all buys - all sells.
+    Hedge net is kept separate (returned by /api/hedging) and added by the
+    frontend to produce ecosystem net exposure.
+    """
     entity   = request.args.get('entity', 'SABIS')
     metal    = request.args.get('metal', 'gold')
-    oz       = get_inventory(entity, metal)
+
+    base_oz  = get_inventory(entity, metal)      # reconciled starting position
     spot     = get_latest_spot(metal)
     aged     = get_aged_inventory(entity, metal)
 
+    # Live physical position: base + all deal buys − all deal sells
+    all_deals = get_deals(entity, metal)
+    buy_oz    = sum(d['oz'] for d in all_deals if d['deal_type'] == 'buy')
+    sell_oz   = sum(d['oz'] for d in all_deals if d['deal_type'] == 'sell')
+    deal_net  = buy_oz - sell_oz
+    live_oz   = base_oz + deal_net
+
+    prov_rate = get_provision_mode(live_oz, metal, entity)['rate_pct']
     dormant_parcels = []
     for parcel in aged:
         acq = datetime.strptime(parcel['acquired_date'], '%Y-%m-%d').date()
@@ -119,18 +132,21 @@ def inventory_endpoint():
         parcel['dormancy'] = dom
         if dom['flagged']:
             parcel['exit_suggestion'] = optimal_exit_suggestion(
-                {**parcel, 'metal': metal}, spot,
-                get_provision_mode(oz, metal, entity)['rate_pct']
+                {**parcel, 'metal': metal}, spot, prov_rate
             )
         dormant_parcels.append(parcel)
 
     return jsonify({
-        'entity':      entity,
-        'metal':       metal,
-        'total_oz':    round(oz, 6),
-        'spot_zar':    spot,
-        'value_zar':   round(oz * spot, 2),
-        'provision':   get_provision_mode(oz, metal, entity),
+        'entity':     entity,
+        'metal':      metal,
+        'total_oz':   round(live_oz,  6),   # live: base + buys − sells
+        'base_oz':    round(base_oz,  6),   # reconciled base position
+        'buy_oz':     round(buy_oz,   4),
+        'sell_oz':    round(sell_oz,  4),
+        'deal_net':   round(deal_net, 4),
+        'spot_zar':   spot,
+        'value_zar':  round(live_oz * spot, 2),
+        'provision':  get_provision_mode(live_oz, metal, entity),
         'aged_parcels': dormant_parcels,
     })
 
