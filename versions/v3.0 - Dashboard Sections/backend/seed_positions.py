@@ -33,11 +33,19 @@ conn.commit()
 conn.close()
 print("  Done.  (SAM / Proofs / Other positions preserved)")
 
-# ── End-of-day physical inventory (reconciled as of 9 April 2026) ─────────────
-print("\nSetting end-of-day physical inventory positions...")
+# ── Physical inventory base positions (Sage Item Valuation Report — 1 March 2026) ─
+# Source: ItemValuationReport extracted from PDF (pdfplumber), all 8 pages.
+# Gold items mapped to troy oz:  KR1 -1104, KR2 +465.5, KR4 +70, KR10 +13.9,
+#   PKR1 +84, PKR4 +0.25, GDin +18.25, GDin852 +0.161, GM10MetCon -0.322,
+#   GM10RRL +0.322, GM50 +1.608  →  Net: -450.331 oz
+# Silver items mapped to troy oz: SB15000 +14467.5, SABIS1KG -12763.55,
+#   SCBrit -4788, SKR1 -3516, SCCML1 +2341, SCAPhil -2322, SCBrit025 +1448.5,
+#   SCAE1 +886, SCBrit010 +512, SK1 +303, SKA +256, SCBritLib +130,
+#   SB1000 -96.45 + many smaller numismatic items  →  Net: -2762.330 oz
+print("\nSetting physical inventory base positions (Sage Item Valuation — 1 March 2026)...")
 EOD_POSITIONS = {
-    ('SABIS', 'gold'):   14.0,
-    ('SABIS', 'silver'): -17722.89,
+    ('SABIS', 'gold'):   -450.331,
+    ('SABIS', 'silver'): -2762.330,
 }
 for (entity, metal), oz in EOD_POSITIONS.items():
     set_inventory_position(entity, metal, oz)
