@@ -500,7 +500,7 @@ function renderBannerAlpha(currentExp, otherExp) {
 
   const alphaColour = currentAlpha >= 0 ? 'var(--gold)' : 'var(--red)';
   setSubLines('exp-alpha-sub',
-    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`, `font-size:12px;font-weight:600;color:${alphaColour}`],
+    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`, `font-size:12px;font-weight:600;color:${alphaColour}`, `color:${alphaColour}`],
     longOz  > 0 ? [fmt(longOz,  2) + ' oz', 'longed (hedge)',    'font-size:10px;opacity:0.75'] : null,
     shortOz > 0 ? [fmt(shortOz, 2) + ' oz', 'shorted (hedge)',   'font-size:10px;opacity:0.75'] : null,
     buyOz   > 0 ? [fmt(buyOz,   2) + ' oz', 'bought (physical)', 'font-size:10px;opacity:0.75'] : null,
@@ -2165,13 +2165,13 @@ function set(id, value) {
   if (el) el.textContent = value;
 }
 
-// Render labeled sub-lines: setSubLines('id', ['value', 'label'], ['value2', 'label2', 'color:red'], ...)
-// Third element in each pair is an optional inline style string. Null entries are skipped.
+// Render labeled sub-lines: setSubLines('id', ['value', 'label'], ['value2', 'label2', 'valStyle', 'lineStyle'], ...)
+// 3rd element = inline style on the value span only. 4th element = style on the whole line (val + label). Null entries skipped.
 function setSubLines(id, ...pairs) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.innerHTML = pairs.filter(p => p != null).map(([val, lbl, style]) =>
-    `<span class="sub-line"><span class="sub-val"${style ? ` style="${style}"` : ''}>${val}</span>&ensp;${lbl}</span>`
+  el.innerHTML = pairs.filter(p => p != null).map(([val, lbl, valStyle, lineStyle]) =>
+    `<span class="sub-line"${lineStyle ? ` style="${lineStyle}"` : ''}><span class="sub-val"${valStyle ? ` style="${valStyle}"` : ''}>${val}</span>&ensp;${lbl}</span>`
   ).join('');
 }
 
