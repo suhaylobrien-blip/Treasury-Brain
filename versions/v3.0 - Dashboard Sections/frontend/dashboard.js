@@ -647,6 +647,11 @@ function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedgin
   const pct    = pctVsSpot(vwap, spot);
   const pctStr = pct != null ? (pct >= 0 ? '+' : '') + fmt(pct, 2) + '%' : '–';
 
+  // GP if net ecosystem exposure closed at live spot (short: buy back at spot; long: sell at spot)
+  const closingGP = vwap > 0 && spot > 0
+    ? (isShort ? (vwap - spot) : (spot - vwap)) * Math.abs(ecoOz)
+    : null;
+
   const catSuffix  = currentCategory === 'bullion' ? ' bullion' : currentCategory === 'proof' ? ' proof' : '';
   const vwapLabel  = (isShort ? 'Sell VWAP' : 'Buy VWAP') + (catSuffix ? ' ·' + catSuffix : '');
 
@@ -655,6 +660,7 @@ function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedgin
   setSubLines('exp-vwap-sub',
     [`${fmt(ecoOz, 2)} oz`, `${metalLbl}${catSuffix} net exposed`],
     vwap > 0 ? [pctStr, `vs spot (${formatCurrency(spot)})`] : null,
+    closingGP != null ? [formatCurrency(closingGP), `GP if closed at spot`] : null,
   );
 
   const card = document.getElementById('exp-card-vwap');
@@ -1359,7 +1365,7 @@ function renderInventorySnapshot(goldBull, goldProof, silBull, silProof) {
           <td class="num">${fmt(it.closing_oz, 3)}</td>
           <td class="num" style="color:var(--muted)">${fmt(it.threshold_stock, 0)}</td>
           <td class="num">${fmt(it.available_to_sell, 0)}</td>
-          <td class="num" style="color:var(--muted)">${it.sage_eaches !== null ? fmt(it.sage_eaches, 0) : '–'}</td>
+          <td class="num" style="color:${it.sage_eaches !== null && it.sage_eaches < 0 ? 'var(--red)' : 'var(--muted)'}">${it.sage_eaches !== null ? fmt(it.sage_eaches, 0) : '–'}</td>
           <td class="num ${reconCls}">${recon}</td>
         `;
         tbody.appendChild(tr);
