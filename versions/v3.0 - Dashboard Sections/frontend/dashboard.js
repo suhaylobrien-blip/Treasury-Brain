@@ -12,7 +12,8 @@ let currentCategory  = 'all';   // all | bullion | proof
 let siloChart, channelChart, volumeChart, vwapChart, gpChart;
 let zarPerUsd  = 0;   // ZAR per 1 USD — populated from /api/spot
 let liveSpots  = { gold: 0, silver: 0 };  // live spot per metal for MTM calc
-const POLL_INTERVAL = 30_000;
+const POLL_INTERVAL      = 30_000;
+const SPOT_POLL_INTERVAL = 15_000; // spot-only refresh — keeps GP & MTM live between full reloads
 
 // Cached snapshot data for inventory re-filtering
 let _invSnap = { goldBull: null, goldProof: null, silBull: null, silProof: null };
@@ -35,7 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('metal-filter-gold');   // default tab = gold
   startClock();
   loadAll();
-  setInterval(loadAll, POLL_INTERVAL);
+  setInterval(loadAll,    POLL_INTERVAL);
+  setInterval(loadSpot,   SPOT_POLL_INTERVAL);
 });
 
 function startClock() {
