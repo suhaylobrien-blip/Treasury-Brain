@@ -1075,7 +1075,7 @@ function renderPositionsTable(positions, goldPhysical, silverPhysical) {
         <span class="${dirClass}">${fmt(netAbs, 2)} oz ${dirLabel}</span>
         <span class="pos-cover">${p._runZar > 0 ? formatCurrency(p._runZar) + ' at spot' : '–'}</span>
         ${p._spotPct !== null
-          ? `<span class="pos-cover ${spotPctClass}">${spotSign}${fmt(p._spotPct, 2)}% vs avg open</span>`
+          ? `<span class="pos-cover ${spotPctClass}">${spotSign}${fmt(p._spotPct, 2)}% vs hedge VWAP</span>`
           : ''}
       </td>
       <td class="pos-notes">${p.notes || '–'}</td>
