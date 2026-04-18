@@ -491,7 +491,7 @@ function renderBannerAlpha(currentExp, otherExp) {
   _lastTreasuryAlpha = currentAlpha;
   set('exp-alpha',     formatCurrency(currentAlpha));
   setSubLines('exp-alpha-sub',
-    [fmt((currentExp && currentExp.matched_oz) || 0, 2) + ' oz', `${currentMetal === 'gold' ? 'gold' : 'silver'} matched hedge`],
+    [fmt((currentExp && currentExp.matched_oz) || 0, 2) + ' oz', `${currentMetal === 'gold' ? 'gold' : 'silver'} close out`],
   );
   updateNetGP();
   set('exp-combined-alpha',     formatCurrency(combinedAlpha));
