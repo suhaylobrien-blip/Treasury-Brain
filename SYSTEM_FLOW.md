@@ -1,6 +1,6 @@
 # Treasury Brain — System Flow Diagram
 
-> **Last updated:** v3.0 (April 2026)
+> **Last updated:** v3.0 (April 2026 — StoneX full reconciliation seeded)
 > **Diagram type:** `flowchart TD` — end-to-end pipeline with subgraphs per layer
 
 ```mermaid
@@ -12,7 +12,7 @@ flowchart TD
         MetalsAPI["Metals-API\nLive XAU / XAG in ZAR + USD\n15s spot poll (SPOT_POLL_INTERVAL)"]
         SettingsJSON["config/settings.json\nEntities · Provision rates\nFolders · API key"]
         ProductsJSON["config/products.json\n100+ products · oz/unit · VAT flag"]
-        StoneXRecon["StoneX Recon · Stone x/build_recon.py\nMonthly account reconciliation\nOutputs: .xlsx (live formulas) + .pdf"]
+        StoneXRecon["StoneX Recon · Stone x/build_recon.py\nMonthly account reconciliation\nOutputs: .xlsx (live formulas) + .pdf\n---\nSeed instruments per month:\nXAU/ZAR + XAG/ZAR (direct ZAR legs)\nXAU/USD + XAG/USD (combo: USD price × FX leg rate)\nLONG: all FNC BUY batches by date\nSHORT: FNC SELL entries + residual open book\nSwap fees: XAU carry → gold · XAG carry → silver\nZAR funding split by daily SWT metal proportion\nEJV interest: split by USD position value %"]
         SagePDF["Sage Item Valuation Report\nMonthly physical inventory snapshot\nExtracted via pdfplumber → base_oz"]
     end
 
@@ -59,6 +59,7 @@ flowchart TD
         InventoryTable[("inventory\nBase oz per entity + metal\nSet from Sage PDF via seed_positions.py\nGold: -450.331 oz · Silver: -2762.330 oz\nLive oz = base + Σbuys − Σsells")]
         AgeingTable[("inventory_ageing\nParcel-level dormancy tracking")]
         HedgingTable[("hedging\nLong / short futures positions\nStone X · SAM · Proofs\nOpen price in ZAR (USD legs converted)")]
+        FundingTable[("funding_costs\nSwap fees + interest earned\nentity · metal · platform · cost_type\nXAU/XAG carry · ZAR funding · EJV interest")]
         SpotTable[("spot_prices\nHistorical XAU / XAG ZAR log")]
         SummaryTable[("daily_summary\nPre-calculated cache")]
     end
@@ -161,6 +162,7 @@ flowchart TD
     StoneXRecon -->|"monthly positions\nXAU/XAG oz + USD VWAP"| SeedScript
     SeedScript --> InventoryTable
     SeedScript --> HedgingTable
+    SeedScript --> FundingTable
 
     DealsTable & HedgingTable --> EventTimeline
     EventTimeline --> DailyGroup --> FIFOMatch --> Carryforward
@@ -172,6 +174,7 @@ flowchart TD
     InventoryTable --> DashAPI & InvAPI & InvSetAPI & SnapAPI
     AgeingTable --> InvAPI
     HedgingTable --> HedgeAPI & DashAPI
+    FundingTable --> TreasuryPane
     PipelineTable --> PipeAPI
     SummaryTable --> DashAPI
     SpotTable --> SpotAPI & DashAPI
@@ -217,4 +220,4 @@ flowchart TD
 | VWAP everywhere | All price calculations use Σ(oz×price)/Σ(oz). Labels: "Hedge VWAP" (paper only), "Open Exposure VWAP" (full book) |
 | Watcher + manual upload | Both auto-import (drop inbox) and manual upload paths supported |
 | VAT split in margin calc | Silver/minted bars = 15% VAT; Krugerrands = VAT exempt (ZA tax) |
-| StoneX recon workflow | Monthly statement → build_recon.py (Excel + PDF) → seed_positions.py deletes old + re-inserts reconciled positions; USD legs converted at prevailing ZAR/USD rate |
+| StoneX recon workflow | Monthly statement → build_recon.py (Excel + PDF) → seed_positions.py deletes old + re-inserts reconciled positions. Splits by instrument: XAU/ZAR + XAG/ZAR (direct) and XAU/USD + XAG/USD (combo, ZAR = USD price × exact FX leg rate). LONGs = all FNC BUY batches grouped by date. SHORTs = FNC SELLs + residual open book (rate derived from ZAR Dr balance ÷ USD position value). Swap fees: XAU carry → gold, XAG carry → silver, ZAR funding split by daily SWT metal proportion. EJV interest split by USD position value %. |
