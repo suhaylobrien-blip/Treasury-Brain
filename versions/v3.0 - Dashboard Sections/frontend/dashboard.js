@@ -499,11 +499,11 @@ function renderBannerAlpha(currentExp, otherExp) {
   const shortOz   = (currentExp && currentExp.sell_side && currentExp.sell_side.short_oz)|| 0;
 
   setSubLines('exp-alpha-sub',
-    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`],
-    longOz  > 0 ? [fmt(longOz,  2) + ' oz', 'longed (hedge)']   : null,
-    shortOz > 0 ? [fmt(shortOz, 2) + ' oz', 'shorted (hedge)']  : null,
-    buyOz   > 0 ? [fmt(buyOz,   2) + ' oz', 'bought (physical)'] : null,
-    sellOz  > 0 ? [fmt(sellOz,  2) + ' oz', 'sold (physical)']   : null,
+    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`, 'font-size:12px;font-weight:600'],
+    longOz  > 0 ? [fmt(longOz,  2) + ' oz', 'longed (hedge)',    'font-size:10px;opacity:0.75'] : null,
+    shortOz > 0 ? [fmt(shortOz, 2) + ' oz', 'shorted (hedge)',   'font-size:10px;opacity:0.75'] : null,
+    buyOz   > 0 ? [fmt(buyOz,   2) + ' oz', 'bought (physical)', 'font-size:10px;opacity:0.75'] : null,
+    sellOz  > 0 ? [fmt(sellOz,  2) + ' oz', 'sold (physical)',   'font-size:10px;opacity:0.75'] : null,
   );
   updateNetGP();
   set('exp-combined-alpha',     formatCurrency(combinedAlpha));
