@@ -490,8 +490,20 @@ function renderBannerAlpha(currentExp, otherExp) {
 
   _lastTreasuryAlpha = currentAlpha;
   set('exp-alpha',     formatCurrency(currentAlpha));
+
+  const metalLbl  = currentMetal === 'gold' ? 'gold' : 'silver';
+  const matchedOz = (currentExp && currentExp.matched_oz)          || 0;
+  const buyOz     = (currentExp && currentExp.buy_side  && currentExp.buy_side.buy_oz)   || 0;
+  const longOz    = (currentExp && currentExp.buy_side  && currentExp.buy_side.long_oz)  || 0;
+  const sellOz    = (currentExp && currentExp.sell_side && currentExp.sell_side.sell_oz) || 0;
+  const shortOz   = (currentExp && currentExp.sell_side && currentExp.sell_side.short_oz)|| 0;
+
   setSubLines('exp-alpha-sub',
-    [fmt((currentExp && currentExp.matched_oz) || 0, 2) + ' oz', `${currentMetal === 'gold' ? 'gold' : 'silver'} close out`],
+    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`],
+    longOz  > 0 ? [fmt(longOz,  2) + ' oz', 'longed (hedge)']   : null,
+    shortOz > 0 ? [fmt(shortOz, 2) + ' oz', 'shorted (hedge)']  : null,
+    buyOz   > 0 ? [fmt(buyOz,   2) + ' oz', 'bought (physical)'] : null,
+    sellOz  > 0 ? [fmt(sellOz,  2) + ' oz', 'sold (physical)']   : null,
   );
   updateNetGP();
   set('exp-combined-alpha',     formatCurrency(combinedAlpha));
