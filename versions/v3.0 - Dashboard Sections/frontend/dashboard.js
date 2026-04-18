@@ -498,8 +498,9 @@ function renderBannerAlpha(currentExp, otherExp) {
   const sellOz    = (currentExp && currentExp.sell_side && currentExp.sell_side.sell_oz) || 0;
   const shortOz   = (currentExp && currentExp.sell_side && currentExp.sell_side.short_oz)|| 0;
 
+  const alphaColour = currentAlpha >= 0 ? 'var(--gold)' : 'var(--red)';
   setSubLines('exp-alpha-sub',
-    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`, 'font-size:12px;font-weight:600'],
+    [fmt(matchedOz, 2) + ' oz', `${metalLbl} closed out`, `font-size:12px;font-weight:600;color:${alphaColour}`],
     longOz  > 0 ? [fmt(longOz,  2) + ' oz', 'longed (hedge)',    'font-size:10px;opacity:0.75'] : null,
     shortOz > 0 ? [fmt(shortOz, 2) + ' oz', 'shorted (hedge)',   'font-size:10px;opacity:0.75'] : null,
     buyOz   > 0 ? [fmt(buyOz,   2) + ' oz', 'bought (physical)', 'font-size:10px;opacity:0.75'] : null,
