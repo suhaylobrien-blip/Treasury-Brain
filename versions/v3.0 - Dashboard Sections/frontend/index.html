@@ -8,7 +8,10 @@
   <link rel="stylesheet" href="style.css?v=7" />
   <link rel="stylesheet" href="_v3_styles.css?v=2" />
   <link rel="stylesheet" href="_v3_tracker.css?v=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <link rel="stylesheet" href="_flatpickr_theme.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 <body>
 
@@ -93,9 +96,9 @@
       <button class="pill"        onclick="setFilter('year',      this)">This Year</button>
     </div>
     <div class="filter-custom">
-      <input type="date" id="filter-from" onchange="setFilter('custom')" title="From" />
+      <input type="text" id="filter-from" placeholder="From" readonly title="From" />
       <span class="filter-sep">–</span>
-      <input type="date" id="filter-to"   onchange="setFilter('custom')" title="To"   />
+      <input type="text" id="filter-to"   placeholder="To"   readonly title="To"   />
     </div>
     <span id="filter-label" class="filter-desc"></span>
   </div>
@@ -109,6 +112,7 @@
       <div class="exp-label">Provision Mode</div>
       <div class="exp-value" id="exp-provision">–</div>
       <div class="exp-sub"   id="exp-prov-sub">–</div>
+      <div class="exp-sub"   id="exp-carry-sub"></div>
     </div>
 
     <div class="exp-card" id="exp-card-net-exposure">
@@ -349,22 +353,36 @@
 
       <section class="card trading-card">
         <div class="tc-header buy-header">
-          <span class="tc-title">Sales Stats <span id="dgp-badge" style="font-size:10px;opacity:.7;margin-left:4px"></span></span>
+          <span class="tc-title">Trading Stats <span id="dgp-badge" style="font-size:10px;opacity:.7;margin-left:4px"></span></span>
         </div>
         <div class="tc-vwap-row">
           <div>
-            <div class="tc-vwap-label">VWAP Sold</div>
+            <div class="tc-vwap-label">Sales VWAP</div>
             <div class="tc-vwap-val" id="dgp-vwap-sold">–</div>
           </div>
           <div>
-            <div class="tc-vwap-label">VWAP Margin</div>
+            <div class="tc-vwap-label">Sales Margin VWAP</div>
             <div class="tc-vwap-val" id="dgp-vwap-margin">–</div>
+          </div>
+        </div>
+        <div class="tc-vwap-row" style="margin-top:6px">
+          <div>
+            <div class="tc-vwap-label">Buyback VWAP</div>
+            <div class="tc-vwap-val" id="dgp-vwap-bought">–</div>
+          </div>
+          <div>
+            <div class="tc-vwap-label">Buyback Margin VWAP</div>
+            <div class="tc-vwap-val" id="dgp-vwap-buy-margin">–</div>
           </div>
         </div>
         <div class="tc-stats">
           <div class="tc-stat">
             <span class="tc-stat-label">Oz Sold</span>
             <span class="tc-stat-val" id="dgp-oz-sold">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Oz Bought</span>
+            <span class="tc-stat-val" id="dgp-oz-bought">–</span>
           </div>
           <div class="tc-stat">
             <span class="tc-stat-label">Inventory</span>
@@ -848,25 +866,6 @@
         </div>
       </section>
 
-      <section class="card trading-card" id="cexp-alpha-card">
-        <div class="tc-header hedge-header">
-          <span class="tc-title">Treasury Alpha</span>
-          <span class="tc-badge" id="cexp-matched-badge">–</span>
-        </div>
-        <div class="tc-vwap-row" style="grid-template-columns:1fr">
-          <div>
-            <div class="tc-vwap-label">Spread Value</div>
-            <div class="tc-vwap-val" id="cexp-alpha">–</div>
-          </div>
-        </div>
-        <div class="tc-stats">
-          <div class="tc-stat">
-            <span class="tc-stat-label">Matched oz</span>
-            <span class="tc-stat-val" id="cexp-alpha-sub">–</span>
-          </div>
-        </div>
-      </section>
-
       <section class="card trading-card">
         <div class="tc-header sell-header">
           <span class="tc-title">Sales + Shorts</span>
@@ -896,6 +895,20 @@
             <span class="tc-stat-val" id="cexp-sell-hedged">–</span>
           </div>
         </div>
+      </section>
+
+      <section class="card trading-card" id="cexp-alpha-card">
+        <div class="tc-header hedge-header">
+          <span class="tc-title">Treasury Alpha</span>
+          <span class="tc-badge" id="cexp-matched-badge">–</span>
+        </div>
+        <div class="tc-vwap-row" style="grid-template-columns:1fr">
+          <div>
+            <div class="tc-vwap-label">Spread Value</div>
+            <div class="tc-vwap-val" id="cexp-alpha">–</div>
+          </div>
+        </div>
+        <div id="cexp-alpha-sub" style="margin-top:10px;display:flex;flex-direction:column;gap:3px;padding:0 2px"></div>
       </section>
 
     </div><!-- /combined exposure grid -->
@@ -945,7 +958,7 @@
             <div class="tc-vwap-val" id="texp-gold-oz">–</div>
           </div>
           <div>
-            <div class="tc-vwap-label">Hedge VWAP</div>
+            <div class="tc-vwap-label">Open Exposure VWAP</div>
             <div class="tc-vwap-val" id="texp-gold-vwap">–</div>
           </div>
         </div>
@@ -955,7 +968,11 @@
             <span class="tc-stat-val" id="texp-gold-physical">–</span>
           </div>
           <div class="tc-stat">
-            <span class="tc-stat-label">Spot vs VWAP</span>
+            <span class="tc-stat-label">Hedge VWAP (Stone X only)</span>
+            <span class="tc-stat-val" id="texp-gold-hedge-vwap">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Spot vs Exp. VWAP</span>
             <span class="tc-stat-val" id="texp-gold-pct">–</span>
           </div>
           <div class="tc-stat">
@@ -975,7 +992,7 @@
             <div class="tc-vwap-val" id="texp-silver-oz">–</div>
           </div>
           <div>
-            <div class="tc-vwap-label">Hedge VWAP</div>
+            <div class="tc-vwap-label">Open Exposure VWAP</div>
             <div class="tc-vwap-val" id="texp-silver-vwap">–</div>
           </div>
         </div>
@@ -985,7 +1002,11 @@
             <span class="tc-stat-val" id="texp-silver-physical">–</span>
           </div>
           <div class="tc-stat">
-            <span class="tc-stat-label">Spot vs VWAP</span>
+            <span class="tc-stat-label">Hedge VWAP (Stone X only)</span>
+            <span class="tc-stat-val" id="texp-silver-hedge-vwap">–</span>
+          </div>
+          <div class="tc-stat">
+            <span class="tc-stat-label">Spot vs Exp. VWAP</span>
             <span class="tc-stat-val" id="texp-silver-pct">–</span>
           </div>
           <div class="tc-stat">
@@ -1016,6 +1037,124 @@
       </section>
 
     </div><!-- /treasury exposure detail grid -->
+
+    <!-- FUNDING COSTS -->
+    <section class="card full-width" id="funding-costs-card">
+      <div class="card-header">
+        <h2>Funding Costs &amp; Interest</h2>
+        <span class="count-label" id="fc-summary-label"></span>
+      </div>
+
+      <!-- Summary row -->
+      <div class="trading-grid tgrid-3col" style="margin-bottom:16px">
+
+        <section class="card trading-card">
+          <div class="tc-header short-header">
+            <span class="tc-title">Swap Fees (Stone X)</span>
+          </div>
+          <div class="tc-vwap-row">
+            <div>
+              <div class="tc-vwap-label">Gold Funding Cost</div>
+              <div class="tc-vwap-val" id="fc-gold-swap">–</div>
+            </div>
+            <div>
+              <div class="tc-vwap-label">Silver Funding Cost</div>
+              <div class="tc-vwap-val" id="fc-silver-swap">–</div>
+            </div>
+          </div>
+          <div class="tc-stats">
+            <div class="tc-stat">
+              <span class="tc-stat-label">Total Swap Fees</span>
+              <span class="tc-stat-val" id="fc-total-swap">–</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card trading-card">
+          <div class="tc-header buy-header">
+            <span class="tc-title">Interest Earned</span>
+          </div>
+          <div class="tc-vwap-row">
+            <div>
+              <div class="tc-vwap-label">Gold</div>
+              <div class="tc-vwap-val" id="fc-gold-int">–</div>
+            </div>
+            <div>
+              <div class="tc-vwap-label">Silver</div>
+              <div class="tc-vwap-val" id="fc-silver-int">–</div>
+            </div>
+          </div>
+          <div class="tc-stats">
+            <div class="tc-stat">
+              <span class="tc-stat-label">Total Interest Earned</span>
+              <span class="tc-stat-val" id="fc-total-int">–</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card trading-card">
+          <div class="tc-header hedge-header">
+            <span class="tc-title">Net Carry Cost</span>
+          </div>
+          <div class="tc-vwap-row" style="grid-template-columns:1fr">
+            <div>
+              <div class="tc-vwap-label">Net (Fees − Interest)</div>
+              <div class="tc-vwap-val" id="fc-net">–</div>
+            </div>
+          </div>
+          <div class="tc-stats">
+            <div class="tc-stat">
+              <span class="tc-stat-label">Entries in period</span>
+              <span class="tc-stat-val" id="fc-count">–</span>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /funding summary grid -->
+
+      <!-- Entry form -->
+      <div class="hedge-add-form" style="margin-bottom:16px">
+        <div class="hedge-add-row">
+          <select id="fc-metal">
+            <option value="gold">Gold (XAU)</option>
+            <option value="silver">Silver (XAG)</option>
+          </select>
+          <select id="fc-platform">
+            <option value="Stone X">Stone X</option>
+            <option value="SAM">SAM</option>
+            <option value="Other">Other</option>
+          </select>
+          <select id="fc-type">
+            <option value="swap_fee">Swap Fee (cost)</option>
+            <option value="interest_earned">Interest Earned</option>
+          </select>
+        </div>
+        <div class="hedge-add-row">
+          <input type="number" id="fc-amount"  placeholder="Amount (ZAR)" step="0.01" />
+          <input type="text"   id="fc-date"    placeholder="Date (YYYY-MM-DD)" />
+          <input type="text"   id="fc-notes"   placeholder="Notes (optional)" />
+          <button class="btn-hedge-add" onclick="addFundingCost()">+ Log</button>
+        </div>
+      </div>
+
+      <!-- Ledger table -->
+      <div class="table-wrap">
+        <table id="fc-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Metal</th>
+              <th>Platform</th>
+              <th>Type</th>
+              <th>Amount (ZAR)</th>
+              <th>Notes</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="fc-tbody"></tbody>
+        </table>
+      </div>
+    </section><!-- /funding costs -->
 
     <!-- BANK RECON -->
     <section class="card full-width">
@@ -1169,7 +1308,7 @@
 
 </main>
 
-<script src="_v3_new_functions.js?v=1"></script>
+<script src="_v3_new_functions.js?v=2"></script>
 <script src="_v3_charts.js?v=1"></script>
 <script src="_v3_tracker.js?v=2"></script>
 <script src="dashboard.js?v=25"></script>

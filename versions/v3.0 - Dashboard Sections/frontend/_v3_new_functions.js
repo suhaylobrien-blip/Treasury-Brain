@@ -14,13 +14,26 @@ function renderTreasuryExposure(goldInv, silverInv, goldHedging, silverHedging, 
     const positions = (hedging && hedging.positions) || [];
     const hedgeVal  = positions.reduce((s, p) => s + (p.contract_oz || 0) * (p.open_price_zar || 0), 0);
     const hedgeOz   = positions.reduce((s, p) => s + (p.contract_oz || 0), 0);
-    const hedgeVwap = hedgeOz > 0 ? hedgeVal / hedgeOz : 0;
+    const hedgeVwap = hedgeOz > 0 ? hedgeVal / hedgeOz : 0;  // Stone X only
     const netHz     = (hedging && hedging.net_oz) || 0;
     const netExp    = physical - netHz;
-    const spotPct   = (hedgeVwap > 0 && spot > 0) ? (spot - hedgeVwap) / hedgeVwap * 100 : null;
     const alpha     = (exp && exp.treasury_alpha) || 0;
     const alphaPct  = hedgeVal > 0 ? (alpha / hedgeVal) * 100 : null;
-    return { physical, hedgeVwap, netExp, spotPct, alpha, alphaPct, netHz };
+
+    // Open Exposure VWAP — FIFO full book (physical + hedge combined)
+    const expNetOz   = (exp && exp.net_oz) || 0;
+    const openExpVwap = expNetOz > 0
+      ? ((exp && exp.open_long_vwap)  || 0)
+      : expNetOz < 0
+        ? ((exp && exp.open_short_vwap) || 0)
+        : 0;
+
+    // Spot % comparison uses Open Exposure VWAP as primary
+    const spotPct = (openExpVwap > 0 && spot > 0)
+      ? (spot - openExpVwap) / openExpVwap * 100
+      : null;
+
+    return { physical, hedgeVwap, openExpVwap, netExp, spotPct, alpha, alphaPct, netHz };
   }
 
   const g = metalStats(goldInv,   goldHedging,   goldExp,   goldSpot);
@@ -34,18 +47,20 @@ function renderTreasuryExposure(goldInv, silverInv, goldHedging, silverHedging, 
     el.className   = 'tc-stat-val ' + (v >= 0 ? 'pos-mtm-pos' : 'pos-mtm-neg');
   }
 
-  set('texp-gold-oz',       fmt(g.netExp, 3) + ' oz');
-  set('texp-gold-vwap',     g.hedgeVwap > 0 ? formatCurrency(g.hedgeVwap) : '--');
-  set('texp-gold-physical', fmt(g.physical, 3) + ' oz');
+  set('texp-gold-oz',         fmt(g.netExp, 3) + ' oz');
+  set('texp-gold-vwap',       g.openExpVwap > 0 ? formatCurrency(g.openExpVwap) : '--');
+  set('texp-gold-hedge-vwap', g.hedgeVwap   > 0 ? formatCurrency(g.hedgeVwap)   : '--');
+  set('texp-gold-physical',   fmt(g.physical, 3) + ' oz');
   setPct(g.spotPct, 'texp-gold-pct');
-  set('texp-gold-alpha',    formatCurrency(g.alpha) +
+  set('texp-gold-alpha',      formatCurrency(g.alpha) +
     (g.alphaPct !== null ? ' (' + (g.alphaPct >= 0 ? '+' : '') + fmt(g.alphaPct, 2) + '%)' : ''));
 
-  set('texp-silver-oz',       fmt(s.netExp, 3) + ' oz');
-  set('texp-silver-vwap',     s.hedgeVwap > 0 ? formatCurrency(s.hedgeVwap) : '--');
-  set('texp-silver-physical', fmt(s.physical, 3) + ' oz');
+  set('texp-silver-oz',         fmt(s.netExp, 3) + ' oz');
+  set('texp-silver-vwap',       s.openExpVwap > 0 ? formatCurrency(s.openExpVwap) : '--');
+  set('texp-silver-hedge-vwap', s.hedgeVwap   > 0 ? formatCurrency(s.hedgeVwap)   : '--');
+  set('texp-silver-physical',   fmt(s.physical, 3) + ' oz');
   setPct(s.spotPct, 'texp-silver-pct');
-  set('texp-silver-alpha',    formatCurrency(s.alpha) +
+  set('texp-silver-alpha',      formatCurrency(s.alpha) +
     (s.alphaPct !== null ? ' (' + (s.alphaPct >= 0 ? '+' : '') + fmt(s.alphaPct, 2) + '%)' : ''));
 
   const goldNetZAR    = Math.abs(g.netExp) * goldSpot;
@@ -67,23 +82,32 @@ function renderDealingGP(deals, otherDeals, inv, otherInv) {
   const goldGP   = goldDeals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
   const silverGP = silverDeals.reduce((s, d) => s + (d.gp_contribution_zar || 0), 0);
 
-  const sells      = deals.filter(d => d.deal_type === 'sell');
-  const ozSold     = sells.reduce((s, d) => s + (d.oz || 0), 0);
-  const valSold    = sells.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
-  const vwapSold   = ozSold > 0 ? valSold / ozSold : 0;
-  const vwapMargin = ozSold > 0
-    ? sells.reduce((s, d) => s + (d.margin_pct || 0) * (d.oz || 0), 0) / ozSold : 0;
+  const sells       = deals.filter(d => d.deal_type === 'sell');
+  const buys        = deals.filter(d => d.deal_type === 'buy');
+  const ozSold      = sells.reduce((s, d) => s + (d.oz || 0), 0);
+  const ozBought    = buys.reduce((s, d)  => s + (d.oz || 0), 0);
+  const valSold     = sells.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
+  const valBought   = buys.reduce((s, d)  => s + (d.deal_value_zar || 0), 0);
+  const vwapSold    = ozSold   > 0 ? valSold   / ozSold   : 0;
+  const vwapBought  = ozBought > 0 ? valBought / ozBought : 0;
+  const vwapMargin  = ozSold   > 0
+    ? sells.reduce((s, d) => s + (d.margin_pct || 0) * (d.oz || 0), 0) / ozSold   : 0;
+  const buyMargin   = ozBought > 0
+    ? buys.reduce((s, d)  => s + (d.margin_pct || 0) * (d.oz || 0), 0) / ozBought : 0;
 
   const badge = document.getElementById('dgp-badge');
   if (badge) badge.textContent = currentMetal === 'gold' ? 'Au' : 'Ag';
 
-  set('dgp-oz-sold',     fmt(ozSold, 3) + ' oz');
-  set('dgp-vwap-sold',   vwapSold > 0 ? formatCurrency(vwapSold) : '--');
-  set('dgp-vwap-margin', ozSold > 0 ? fmt(vwapMargin, 2) + '%' : '--');
-  set('dgp-inv-oz',      fmt((inv && inv.total_oz) || 0, 3) + ' oz');
-  set('dcgp-total',      formatCurrency(goldGP + silverGP));
-  set('dcgp-gold',       formatCurrency(goldGP));
-  set('dcgp-silver',     formatCurrency(silverGP));
+  set('dgp-oz-sold',        fmt(ozSold,    3) + ' oz');
+  set('dgp-oz-bought',      fmt(ozBought,  3) + ' oz');
+  set('dgp-vwap-sold',      vwapSold   > 0 ? formatCurrency(vwapSold)   : '--');
+  set('dgp-vwap-margin',    ozSold     > 0 ? fmt(vwapMargin, 2) + '%'   : '--');
+  set('dgp-vwap-bought',    vwapBought > 0 ? formatCurrency(vwapBought) : '--');
+  set('dgp-vwap-buy-margin',ozBought   > 0 ? fmt(buyMargin,  2) + '%'   : '--');
+  set('dgp-inv-oz',         fmt((inv && inv.total_oz) || 0, 3) + ' oz');
+  set('dcgp-total',         formatCurrency(goldGP + silverGP));
+  set('dcgp-gold',          formatCurrency(goldGP));
+  set('dcgp-silver',        formatCurrency(silverGP));
 }
 
 // ─── BANK RECONCILIATION ─────────────────────────────────────────────────────
@@ -373,4 +397,92 @@ function printHighlights() {
   w.document.write('</body></html>');
   w.document.close();
   w.print();
+}
+
+// ─── FUNDING COSTS ───────────────────────────────────────────────────────────
+
+function renderFundingCosts(data) {
+  if (!data) return;
+  const s  = data.summary || {};
+  const fc = v => v === 0 ? 'R0.00' : formatCurrency(v);
+  const cls = v => v < 0 ? 'color:var(--red)' : v > 0 ? 'color:var(--gold)' : '';
+
+  set('fc-gold-swap',   fc(s.gold_swap_fees   || 0));
+  set('fc-silver-swap', fc(s.silver_swap_fees || 0));
+  set('fc-total-swap',  fc(s.total_swap_fees  || 0));
+  set('fc-gold-int',    fc(s.gold_interest    || 0));
+  set('fc-silver-int',  fc(s.silver_interest  || 0));
+  set('fc-total-int',   fc(s.total_interest   || 0));
+
+  const net    = s.net_funding_cost || 0;
+  const netEl  = document.getElementById('fc-net');
+  if (netEl) { netEl.textContent = fc(net); netEl.style = cls(net * -1); }
+
+  const rows   = data.rows || [];
+  set('fc-count', rows.length);
+  const lbl = document.getElementById('fc-summary-label');
+  if (lbl) lbl.textContent = `${rows.length} entr${rows.length !== 1 ? 'ies' : 'y'} in period`;
+
+  const tbody = document.getElementById('fc-tbody');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:0.45;padding:18px">No funding costs logged for this period</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const isSwap = r.cost_type === 'swap_fee';
+    const colour = isSwap ? 'var(--red)' : 'var(--green)';
+    const typeLbl = isSwap ? 'Swap Fee' : 'Interest Earned';
+    return `<tr>
+      <td>${r.charge_date}</td>
+      <td>${r.metal === 'gold' ? 'Gold' : 'Silver'}</td>
+      <td>${r.platform || 'Stone X'}</td>
+      <td style="color:${colour}">${typeLbl}</td>
+      <td style="color:${colour};font-weight:600">${fc(r.amount_zar)}</td>
+      <td style="opacity:0.65">${r.notes || '–'}</td>
+      <td><button class="btn-close-pos" onclick="deleteFundingCost(${r.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function addFundingCost() {
+  const metal    = document.getElementById('fc-metal')?.value;
+  const platform = document.getElementById('fc-platform')?.value;
+  const costType = document.getElementById('fc-type')?.value;
+  const amount   = parseFloat(document.getElementById('fc-amount')?.value);
+  const date_    = document.getElementById('fc-date')?.value?.trim();
+  const notes    = document.getElementById('fc-notes')?.value?.trim() || '';
+
+  if (!metal || !costType || isNaN(amount) || !date_) {
+    alert('Please fill in metal, type, amount and date.');
+    return;
+  }
+
+  // Swap fees stored as negative (cost); interest earned as positive
+  const signedAmount = costType === 'swap_fee' ? -Math.abs(amount) : Math.abs(amount);
+
+  await api('/api/funding-costs', {
+    method: 'POST',
+    json: {
+      entity: currentEntity, metal, platform, cost_type: costType,
+      amount_zar: signedAmount, charge_date: date_, notes,
+    },
+  });
+
+  document.getElementById('fc-amount').value = '';
+  document.getElementById('fc-date').value   = '';
+  document.getElementById('fc-notes').value  = '';
+  loadFundingCosts();
+}
+
+async function deleteFundingCost(id) {
+  if (!confirm('Remove this funding cost entry?')) return;
+  await api(`/api/funding-costs/${id}`, { method: 'DELETE' });
+  loadFundingCosts();
+}
+
+async function loadFundingCosts() {
+  const fq = filterFrom ? `&from=${filterFrom}` + (filterTo ? `&to=${filterTo}` : '') : '';
+  const data = await api(`/api/funding-costs?entity=${currentEntity}${fq}`).catch(() => null);
+  renderFundingCosts(data);
 }

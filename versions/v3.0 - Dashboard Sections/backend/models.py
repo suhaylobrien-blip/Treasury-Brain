@@ -291,6 +291,20 @@ def init_db():
         UNIQUE(entity, sage_code, record_date)
     )""")
 
+    # ── FUNDING COSTS (swap fees, interest) ──────────────────────────────
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS funding_costs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity      TEXT NOT NULL,
+        metal       TEXT NOT NULL CHECK(metal IN ('gold','silver')),
+        platform    TEXT NOT NULL DEFAULT 'Stone X',
+        cost_type   TEXT NOT NULL CHECK(cost_type IN ('swap_fee','interest_earned')),
+        amount_zar  REAL NOT NULL,
+        charge_date TEXT NOT NULL,
+        notes       TEXT,
+        created_at  TEXT DEFAULT (datetime('now'))
+    )""")
+
     conn.commit()
     seed_inv_products(conn)
     seed_inv_test_data(conn)
@@ -1247,6 +1261,55 @@ def get_inv_snapshot(entity, metal, category, date_str=None):
             'ecosystem_oz':        ecosystem_oz,
         },
     }
+
+
+# ─────────────────────────────────────────────
+# FUNDING COSTS (swap fees / interest)
+# ─────────────────────────────────────────────
+
+def get_funding_costs(entity: str, metal: str = None,
+                      from_date: str = None, to_date: str = None) -> list:
+    conn   = get_conn()
+    where  = "entity=?"
+    params = [entity]
+    if metal:
+        where += " AND metal=?"
+        params.append(metal)
+    if from_date:
+        where += " AND charge_date>=?"
+        params.append(from_date)
+    if to_date:
+        where += " AND charge_date<=?"
+        params.append(to_date)
+    rows = conn.execute(
+        f"SELECT * FROM funding_costs WHERE {where} ORDER BY charge_date DESC, id DESC",
+        params
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def insert_funding_cost(entity: str, metal: str, platform: str,
+                        cost_type: str, amount_zar: float,
+                        charge_date: str, notes: str = '') -> int:
+    conn = get_conn()
+    cur  = conn.execute(
+        "INSERT INTO funding_costs (entity, metal, platform, cost_type, amount_zar, charge_date, notes) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (entity, metal, platform, cost_type, round(amount_zar, 2), charge_date, notes)
+    )
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return new_id
+
+
+def delete_funding_cost(cost_id: int) -> bool:
+    conn = get_conn()
+    cur  = conn.execute("DELETE FROM funding_costs WHERE id=?", (cost_id,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0
 
 
 if __name__ == '__main__':

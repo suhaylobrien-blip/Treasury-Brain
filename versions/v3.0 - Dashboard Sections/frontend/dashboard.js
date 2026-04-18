@@ -32,8 +32,28 @@ let filterTo    = '';
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 
+// Flatpickr instances — module-level so setFilter can read their selectedDates
+let _fpFrom, _fpTo;
+
 document.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('metal-filter-gold');   // default tab = gold
+
+  // ── Calendar pickers ────────────────────────────────────────────────────────
+  const fpCfg = {
+    dateFormat:  'Y-m-d',
+    allowInput:  false,
+    disableMobile: true,
+    onChange() { setFilter('custom'); },
+  };
+  _fpFrom = flatpickr('#filter-from', {
+    ...fpCfg,
+    onReady(_d, _s, fp) { fp.calendarContainer.setAttribute('data-picker', 'from'); },
+  });
+  _fpTo = flatpickr('#filter-to', {
+    ...fpCfg,
+    onReady(_d, _s, fp) { fp.calendarContainer.setAttribute('data-picker', 'to'); },
+  });
+
   startClock();
   loadAll();
   setInterval(loadAll,    POLL_INTERVAL);
@@ -125,8 +145,8 @@ function setFilter(mode, btn) {
     filterFrom = `${today.getFullYear()}-01-01`;
     filterTo   = ymd(today);
   } else if (mode === 'custom') {
-    filterFrom = document.getElementById('filter-from')?.value || '';
-    filterTo   = document.getElementById('filter-to')?.value   || '';
+    filterFrom = (_fpFrom && _fpFrom.selectedDates[0]) ? ymd(_fpFrom.selectedDates[0]) : '';
+    filterTo   = (_fpTo   && _fpTo.selectedDates[0])   ? ymd(_fpTo.selectedDates[0])   : '';
     // Deactivate all pills for custom
     document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
   } else {
@@ -242,8 +262,17 @@ async function loadAll() {
       [`Au ${fmt(goldEcoOz, 2)} oz`, 'gold net exposure'],
       [`Ag ${fmt(silverEcoOz, 2)} oz`, 'silver net exposure'],
     );
+    const _cSells   = allDeals.filter(d => d.deal_type === 'sell');
+    const _cBuys    = allDeals.filter(d => d.deal_type === 'buy');
+    const _cSellOz  = _cSells.reduce((s, d) => s + (d.oz || 0), 0);
+    const _cBuyOz   = _cBuys.reduce((s, d)  => s + (d.oz || 0), 0);
+    const _cSellMgn = _cSellOz > 0 ? _cSells.reduce((s, d) => s + (d.margin_pct||0)*(d.oz||0), 0) / _cSellOz : 0;
+    const _cBuyMgn  = _cBuyOz  > 0 ? _cBuys.reduce((s, d)  => s + (d.margin_pct||0)*(d.oz||0), 0) / _cBuyOz  : 0;
+
     set('exp-gp',   formatCurrency(combGP_));
     setSubLines('exp-gp-sub',
+      _cSellOz > 0 ? [fmt(_cSellOz, 3) + ' oz', `sold @ +${fmt(_cSellMgn, 2)}% VWAP (Au+Ag)`] : null,
+      _cBuyOz  > 0 ? [fmt(_cBuyOz,  3) + ' oz', `bought @ +${fmt(_cBuyMgn, 2)}% VWAP (Au+Ag)`] : null,
       [`${allDeals.length}`, `deal${allDeals.length !== 1 ? 's' : ''} in period (Au+Ag)`],
     );
     set('exp-provision', provActive ? 'PROVISION' : 'NO PROVISION');
@@ -260,6 +289,7 @@ async function loadAll() {
       provCard.classList.toggle('active',   provActive);
       provCard.classList.toggle('inactive', !provActive);
     }
+    renderCarryIn(gExp);
 
     set('exp-combined-gp',     formatCurrency(combGP_));
     setSubLines('exp-combined-gp-sub',
@@ -287,6 +317,7 @@ async function loadAll() {
     if (typeof renderTreasuryExposure=== 'function') renderTreasuryExposure(gInv, sInv, gHedge, sHedge, gExp, sExp);
     if (typeof renderDealingGP       === 'function') renderDealingGP(fgDeals, fsDeals, gInv, sInv);
     if (typeof renderBankRecon       === 'function') renderBankRecon(fgDeals, fsDeals);
+    if (typeof loadFundingCosts      === 'function') loadFundingCosts();
     // ── Inventory snapshot ─────────────────────────────────────────────────
     const snapBase = `entity=${currentEntity}`;
     const [gsBull, gsProof, ssBull, ssProof] = await Promise.all([
@@ -352,6 +383,7 @@ async function loadAll() {
   const fOtherDeals  = filterByCategory(otherDeals, currentCategory);
   // Exposure banner + ecosystem always use full (unfiltered) deals
   renderExposure(deals, inv, hedging);
+  renderCarryIn(exposure);
   renderCombinedGP(deals, otherDeals);
   renderCombinedPNL(combinedGP_, combinedAlpha_, goldGP_, silverGP_, goldAlpha_, silverAlpha_);
   renderTrading(fDeals);
@@ -380,6 +412,7 @@ async function loadAll() {
   if (typeof renderTreasuryExposure=== 'function') renderTreasuryExposure(goldInv__, silverInv__, goldHedge__, silverHedge__, goldExp__, silverExp__);
   if (typeof renderDealingGP       === 'function') renderDealingGP(fDeals, fOtherDeals, inv, otherInv);
   if (typeof renderBankRecon       === 'function') renderBankRecon(goldDeals__, silverDeals__);
+  if (typeof loadFundingCosts      === 'function') loadFundingCosts();
 
   // ── Inventory snapshot ───────────────────────────────────────────────────
   const snapBase_ = `entity=${currentEntity}`;
@@ -422,9 +455,18 @@ function renderExposure(deals, inv, hedging) {
     [`${fmt(ecosystemOz, 2)} oz`, 'net exposure'],
     [`${fmt(bullionOz, 2)} oz`, 'physical ecosystem'],
   );
+  const _sells   = deals.filter(d => d.deal_type === 'sell');
+  const _buys    = deals.filter(d => d.deal_type === 'buy');
+  const _sellOz  = _sells.reduce((s, d) => s + (d.oz || 0), 0);
+  const _buyOz   = _buys.reduce((s, d)  => s + (d.oz || 0), 0);
+  const _sellMgn = _sellOz > 0 ? _sells.reduce((s, d) => s + (d.margin_pct||0)*(d.oz||0), 0) / _sellOz : 0;
+  const _buyMgn  = _buyOz  > 0 ? _buys.reduce((s, d)  => s + (d.margin_pct||0)*(d.oz||0), 0) / _buyOz  : 0;
+
   _lastDealingGP = totalGP;
   set('exp-gp',   formatCurrency(totalGP));
   setSubLines('exp-gp-sub',
+    _sellOz > 0 ? [fmt(_sellOz, 3) + ' oz', `sold @ +${fmt(_sellMgn, 2)}% VWAP`] : null,
+    _buyOz  > 0 ? [fmt(_buyOz,  3) + ' oz', `bought @ +${fmt(_buyMgn, 2)}% VWAP`] : null,
     [`${deals.length}`, `deal${deals.length !== 1 ? 's' : ''} in period`],
   );
   updateNetGP();
@@ -441,6 +483,38 @@ function renderExposure(deals, inv, hedging) {
     provCard.classList.toggle('active',   provActive);
     provCard.classList.toggle('inactive', !provActive);
   }
+}
+
+// ─── CARRY-IN DISPLAY (Provision card sub-section) ───────────────────────────
+
+function renderCarryIn(exp) {
+  const el = document.getElementById('exp-carry-sub');
+  if (!el) return;
+  const ci = exp && exp.carry_in;
+  if (!ci || !ci.net_oz) { el.innerHTML = ''; return; }
+
+  const netOz   = ci.net_oz;
+  const netVwap = ci.net_vwap || 0;
+  const netZar  = ci.net_zar  || 0;
+  const dir     = netOz > 0 ? 'long' : 'short';
+  const colour  = netOz > 0 ? 'var(--gold)' : 'var(--red)';
+
+  const carryLabel = {
+    today:     'Prev. Day Carry Forward',
+    yesterday: 'Carry Forward (pre-yesterday)',
+    week:      'Carry Forward (pre-week)',
+    month:     'Carry Forward (pre-month)',
+    year:      'Carry Forward (pre-year)',
+    custom:    filterFrom ? `Carry Forward (before ${filterFrom})` : 'Prev. Period Carry Forward',
+  }[filterMode] || 'Prev. Period Carry Forward';
+
+  el.innerHTML =
+    `<div style="margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,0.12);">` +
+    `<div style="font-size:9px;font-weight:700;letter-spacing:0.06em;opacity:0.6;margin-bottom:4px;text-transform:uppercase;">${carryLabel}</div>` +
+    `<span class="sub-line"><span class="sub-val" style="color:${colour}">${fmt(Math.abs(netOz), 2)} oz ${dir}</span>&ensp;net position</span>` +
+    `<span class="sub-line"><span class="sub-val">${formatCurrency(netVwap)}</span>&ensp;VWAP</span>` +
+    `<span class="sub-line"><span class="sub-val" style="color:${colour}">${formatCurrency(Math.abs(netZar))}</span>&ensp;ZAR exposure</span>` +
+    `</div>`;
 }
 
 // ─── COMBINED GP (Au + Ag) ────────────────────────────────────────────────────
@@ -946,9 +1020,22 @@ function renderCombinedExposure(exp) {
   set('cexp-sell-badge',    fmt(ss.oz       || 0, 2) + ' oz total');
 
   // Treasury Alpha
+  const matchedOz   = exp.matched_oz || 0;
+  const _buyOz      = bs.buy_oz   || 0;
+  const _longOz     = bs.long_oz  || 0;
+  const _sellOz     = ss.sell_oz  || 0;
+  const _shortOz    = ss.short_oz || 0;
+  const alphaColour = alpha >= 0 ? 'var(--gold)' : 'var(--red)';
+
   set('cexp-alpha',         formatCurrency(alpha));
-  set('cexp-alpha-sub',     fmt(exp.matched_oz || 0, 2) + ' oz matched');
-  set('cexp-matched-badge', fmt(exp.matched_oz || 0, 2) + ' oz matched');
+  set('cexp-matched-badge', fmt(matchedOz, 2) + ' oz closed out');
+  setSubLines('cexp-alpha-sub',
+    [fmt(matchedOz, 2) + ' oz', 'closed out',        `font-size:12px;font-weight:600;color:${alphaColour}`, `color:${alphaColour}`],
+    _longOz  > 0 ? [fmt(_longOz,  2) + ' oz', 'longed (hedge)',    'font-size:11px;opacity:0.75'] : null,
+    _shortOz > 0 ? [fmt(_shortOz, 2) + ' oz', 'shorted (hedge)',   'font-size:11px;opacity:0.75'] : null,
+    _buyOz   > 0 ? [fmt(_buyOz,   2) + ' oz', 'bought (physical)', 'font-size:11px;opacity:0.75'] : null,
+    _sellOz  > 0 ? [fmt(_sellOz,  2) + ' oz', 'sold (physical)',   'font-size:11px;opacity:0.75'] : null,
+  );
 
   const alphaCard = document.getElementById('cexp-alpha-card');
   if (alphaCard) {
@@ -1506,9 +1593,9 @@ async function loadSpot() {
   set('rates-gold-spot',   formatCurrency(gold));
   set('rates-silver-spot', formatCurrency(silver));
   if (zarPerUsd > 0) {
-    set('rates-zar-usd',     fmt(zarPerUsd, 2));
-    set('rates-gold-usd',    gold > 0   ? formatUSD(gold   / zarPerUsd) : '–');
-    set('rates-silver-usd',  silver > 0 ? formatUSD(silver / zarPerUsd) : '–');
+    set('rates-zar-usd',    fmt(zarPerUsd, 4));
+    set('rates-gold-usd',   gold   > 0 ? formatUSD(gold)   : '–');
+    set('rates-silver-usd', silver > 0 ? formatUSD(silver) : '–');
   }
   const now = new Date();
   set('rates-last-updated', now.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));

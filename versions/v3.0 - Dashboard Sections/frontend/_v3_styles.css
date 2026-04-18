@@ -36,8 +36,9 @@
 .section-pane { display: flex; flex-direction: column; gap: 20px; }
 .section-pane.hidden { display: none !important; }
 
-/* ── 2-COL TRADING GRID ────────────────────────────────────────────── */
+/* ── 2-COL / 3-COL TRADING GRIDS ──────────────────────────────────── */
 .tgrid-2col { grid-template-columns: 1fr 1fr; }
+.tgrid-3col { grid-template-columns: 1fr 1fr 1fr; }
 
 /* ── METAL EXPOSURE HEADERS ──────────────────────────────────────── */
 .gold-exp-header {

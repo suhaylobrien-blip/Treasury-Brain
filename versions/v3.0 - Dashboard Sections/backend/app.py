@@ -16,7 +16,8 @@ from models import (
     set_inventory_position,
     get_hedging_positions, insert_hedging_position, close_hedging_position,
     get_realized_hedge_pnl,
-    get_pipeline, delete_pipeline_row
+    get_pipeline, delete_pipeline_row,
+    get_funding_costs, insert_funding_cost, delete_funding_cost
 )
 from processor import (
     get_provision_mode, live_impact_preview, build_daily_summary,
@@ -390,18 +391,77 @@ def hedging_realized():
     return jsonify(get_realized_hedge_pnl(entity, metal, from_date, to_date))
 
 
+# ─────────────────────────────────────────────
+# FUNDING COSTS (swap fees / interest)
+# ─────────────────────────────────────────────
+
+@app.route('/api/funding-costs')
+def funding_costs_get():
+    entity    = request.args.get('entity', 'SABIS')
+    metal     = request.args.get('metal')          # optional — omit for all metals
+    from_date = request.args.get('from')
+    to_date   = request.args.get('to')
+    rows      = get_funding_costs(entity, metal, from_date, to_date)
+
+    gold_swap   = sum(r['amount_zar'] for r in rows if r['metal'] == 'gold'   and r['cost_type'] == 'swap_fee')
+    silver_swap = sum(r['amount_zar'] for r in rows if r['metal'] == 'silver' and r['cost_type'] == 'swap_fee')
+    gold_int    = sum(r['amount_zar'] for r in rows if r['metal'] == 'gold'   and r['cost_type'] == 'interest_earned')
+    silver_int  = sum(r['amount_zar'] for r in rows if r['metal'] == 'silver' and r['cost_type'] == 'interest_earned')
+
+    return jsonify({
+        'rows':         rows,
+        'summary': {
+            'gold_swap_fees':       round(gold_swap,   2),
+            'silver_swap_fees':     round(silver_swap, 2),
+            'gold_interest':        round(gold_int,    2),
+            'silver_interest':      round(silver_int,  2),
+            'total_swap_fees':      round(gold_swap + silver_swap, 2),
+            'total_interest':       round(gold_int  + silver_int,  2),
+            'net_funding_cost':     round((gold_swap + silver_swap) - (gold_int + silver_int), 2),
+        }
+    })
+
+
+@app.route('/api/funding-costs', methods=['POST'])
+def funding_costs_post():
+    data = request.get_json(force=True)
+    required = ('entity', 'metal', 'cost_type', 'amount_zar', 'charge_date')
+    if not all(k in data for k in required):
+        return jsonify({'error': 'Missing required fields'}), 400
+    if data['cost_type'] not in ('swap_fee', 'interest_earned'):
+        return jsonify({'error': 'cost_type must be swap_fee or interest_earned'}), 400
+    if data['metal'] not in ('gold', 'silver'):
+        return jsonify({'error': 'metal must be gold or silver'}), 400
+
+    new_id = insert_funding_cost(
+        entity      = data['entity'],
+        metal       = data['metal'],
+        platform    = data.get('platform', 'Stone X'),
+        cost_type   = data['cost_type'],
+        amount_zar  = float(data['amount_zar']),
+        charge_date = data['charge_date'],
+        notes       = data.get('notes', ''),
+    )
+    return jsonify({'id': new_id, 'status': 'created'}), 201
+
+
+@app.route('/api/funding-costs/<int:cost_id>', methods=['DELETE'])
+def funding_costs_delete(cost_id):
+    deleted = delete_funding_cost(cost_id)
+    return jsonify({'status': 'deleted' if deleted else 'not_found'})
+
+
 @app.route('/api/exposure')
 def exposure_endpoint():
     """
-    FIFO daily book engine — matches longs vs shorts chronologically, per metal.
+    FIFO daily book engine with carry-in tracking.
 
-    Each day's activity (physical buys/sells + hedge longs/shorts) is added to
-    the running book in date order. Positions are matched FIFO as opposing sides
-    accumulate. Unmatched positions carry forward and affect subsequent VWAPs.
+    All history before the selected period is run through FIFO first — the
+    resulting open book is the 'carry_in' displayed in the Provision block.
+    The period FIFO then starts from that carry-in state.
 
-    Treasury Alpha = Σ (sell_price - buy_price) × oz   across all FIFO-matched pairs
-    Matched oz     = total oz where a long was closed against a short
-    Open book      = residual unmatched positions still running
+    Treasury Alpha = Σ (sell_price - buy_price) × oz  across period-matched pairs
+    carry_in       = open book entering the period (net oz, VWAP, ZAR value)
     """
     from collections import defaultdict
 
@@ -410,99 +470,111 @@ def exposure_endpoint():
     from_date = request.args.get('from')
     to_date   = request.args.get('to')
 
-    deals     = get_deals(entity, metal, from_date=from_date, to_date=to_date)
-    positions = get_hedging_positions(entity, metal)   # full hedge book — no date filter
+    all_deals = get_deals(entity, metal)               # full history, no date filter
+    positions = get_hedging_positions(entity, metal)
     spot      = get_latest_spot(metal)
 
-    # ── Raw aggregates (for display panels — unchanged) ───────────────────────
-    buys   = [d for d in deals     if d['deal_type']     == 'buy']
-    sells  = [d for d in deals     if d['deal_type']     == 'sell']
-    longs  = [p for p in positions if p['position_type'] == 'long']
-    shorts = [p for p in positions if p['position_type'] == 'short']
-
-    buy_oz    = sum(d['oz']                             for d in buys)
-    sell_oz   = sum(d['oz']                             for d in sells)
-    long_oz   = sum(p['contract_oz']                    for p in longs)
-    short_oz  = sum(p['contract_oz']                    for p in shorts)
-    buy_val   = sum(d['deal_value_zar']                 for d in buys)
-    sell_val  = sum(d['deal_value_zar']                 for d in sells)
-    long_val  = sum(p['open_price_zar'] * p['contract_oz'] for p in longs)
-    short_val = sum(p['open_price_zar'] * p['contract_oz'] for p in shorts)
-
-    agg_buy_side_oz   = buy_oz  + long_oz
-    agg_sell_side_oz  = sell_oz + short_oz
-    agg_buy_side_val  = buy_val + long_val
-    agg_sell_side_val = sell_val + short_val
-    agg_buy_vwap  = agg_buy_side_val  / agg_buy_side_oz  if agg_buy_side_oz  > 0 else 0
-    agg_sell_vwap = agg_sell_side_val / agg_sell_side_oz if agg_sell_side_oz > 0 else 0
-
-    # ── Build chronological event timeline ────────────────────────────────────
-    events = []
-    for d in deals:
-        oz = d['oz'] or 0
-        if oz <= 0:
-            continue
-        price = (d['deal_value_zar'] / oz) if oz > 0 else 0
-        events.append({
-            'date':   d['deal_date'],
-            'oz':     oz,
-            'price':  price,
-            'side':   'long' if d['deal_type'] == 'buy' else 'short',
-        })
-    for p in positions:
-        oz = p['contract_oz'] or 0
-        if oz <= 0:
-            continue
-        events.append({
-            'date':  p['open_date'],
-            'oz':    oz,
-            'price': p['open_price_zar'] or 0,
-            'side':  'long' if p['position_type'] == 'long' else 'short',
-        })
-
-    # ── Group by date, process chronologically ────────────────────────────────
-    daily = defaultdict(lambda: {'long': [], 'short': []})
-    for e in events:
-        daily[e['date']][e['side']].append({'oz': e['oz'], 'price': e['price']})
-
-    carry_long  = []   # open long positions carried forward (FIFO queue)
-    carry_short = []   # open short positions carried forward (FIFO queue)
-    matched_pairs = []
-
-    def _match():
-        """FIFO: consume the fronts of both queues until one is exhausted."""
-        while carry_long and carry_short:
-            l, s  = carry_long[0], carry_short[0]
-            oz    = min(l['oz'], s['oz'])
-            matched_pairs.append({
-                'oz':        oz,
-                'buy_price':  l['price'],
-                'sell_price': s['price'],
+    # ── FIFO helpers ──────────────────────────────────────────────────────────
+    def _events_from(deals_subset, pos_subset):
+        evts = []
+        for d in deals_subset:
+            oz = d['oz'] or 0
+            if oz <= 0: continue
+            evts.append({
+                'date':  d['deal_date'],
+                'oz':    oz,
+                'price': d['deal_value_zar'] / oz,
+                'side':  'long' if d['deal_type'] == 'buy' else 'short',
             })
-            l['oz'] -= oz
-            s['oz'] -= oz
-            if l['oz'] < 1e-9: carry_long.pop(0)
-            if s['oz'] < 1e-9: carry_short.pop(0)
+        for p in pos_subset:
+            oz = p['contract_oz'] or 0
+            if oz <= 0: continue
+            evts.append({
+                'date':  p['open_date'],
+                'oz':    oz,
+                'price': p['open_price_zar'] or 0,
+                'side':  'long' if p['position_type'] == 'long' else 'short',
+            })
+        return evts
 
-    for date in sorted(daily.keys()):
-        carry_long.extend(daily[date]['long'])
-        carry_short.extend(daily[date]['short'])
-        _match()
+    def _run_fifo(events, init_long=None, init_short=None):
+        """Return (carry_long, carry_short, matched_pairs), starting from init state."""
+        daily = defaultdict(lambda: {'long': [], 'short': []})
+        for e in events:
+            daily[e['date']][e['side']].append({'oz': e['oz'], 'price': e['price']})
+        cl = [dict(x) for x in (init_long  or [])]
+        cs = [dict(x) for x in (init_short or [])]
+        matched = []
+        def _match():
+            while cl and cs:
+                l, s = cl[0], cs[0]
+                oz   = min(l['oz'], s['oz'])
+                matched.append({'oz': oz, 'buy_price': l['price'], 'sell_price': s['price']})
+                l['oz'] -= oz;  s['oz'] -= oz
+                if l['oz'] < 1e-9: cl.pop(0)
+                if s['oz'] < 1e-9: cs.pop(0)
+        for date in sorted(daily.keys()):
+            cl.extend(daily[date]['long'])
+            cs.extend(daily[date]['short'])
+            _match()
+        return cl, cs, matched
 
-    # ── FIFO results ──────────────────────────────────────────────────────────
+    def _book_summary(cl, cs):
+        lo  = sum(e['oz'] for e in cl);  so  = sum(e['oz'] for e in cs)
+        lv  = sum(e['oz'] * e['price'] for e in cl)
+        sv  = sum(e['oz'] * e['price'] for e in cs)
+        lvw = lv / lo if lo > 0 else 0
+        svw = sv / so if so > 0 else 0
+        net = lo - so
+        nvw = lvw if net > 0 else (svw if net < 0 else 0)
+        return {
+            'net_oz':    round(net,          4),
+            'net_vwap':  round(nvw,          2),
+            'net_zar':   round(abs(net)*nvw, 2),
+            'long_oz':   round(lo,           4),
+            'short_oz':  round(so,           4),
+            'long_vwap': round(lvw,          2),
+            'short_vwap':round(svw,          2),
+        }
+
+    # ── Split events into pre-period and period ───────────────────────────────
+    if from_date:
+        pre_deals  = [d for d in all_deals if d['deal_date'] <  from_date]
+        per_deals  = [d for d in all_deals if d['deal_date'] >= from_date
+                      and (not to_date or d['deal_date'] <= to_date)]
+        pre_pos    = [p for p in positions if p['open_date'] <  from_date]
+        per_pos    = [p for p in positions if p['open_date'] >= from_date
+                      and (not to_date or p['open_date'] <= to_date)]
+    else:
+        pre_deals  = []
+        per_deals  = all_deals if not to_date else [d for d in all_deals if d['deal_date'] <= to_date]
+        pre_pos    = []
+        per_pos    = positions if not to_date else [p for p in positions if p['open_date'] <= to_date]
+
+    # ── Carry-in: FIFO state at end of pre-period ─────────────────────────────
+    empty_carry = {'net_oz': 0, 'net_vwap': 0, 'net_zar': 0,
+                   'long_oz': 0, 'short_oz': 0, 'long_vwap': 0, 'short_vwap': 0}
+    init_long, init_short = [], []
+    if pre_deals or pre_pos:
+        init_long, init_short, _ = _run_fifo(_events_from(pre_deals, pre_pos))
+    carry_in = _book_summary(init_long, init_short) if (init_long or init_short) else empty_carry
+
+    # ── Period FIFO — continues from carry-in state ───────────────────────────
+    period_events = _events_from(per_deals, per_pos)
+    carry_long, carry_short, matched_pairs = _run_fifo(period_events, init_long, init_short)
+
     total_matched  = sum(m['oz'] for m in matched_pairs)
     realized_alpha = sum((m['sell_price'] - m['buy_price']) * m['oz'] for m in matched_pairs)
 
-    # ── Open book (residual unmatched positions) ──────────────────────────────
-    open_long_oz   = sum(e['oz'] for e in carry_long)
-    open_short_oz  = sum(e['oz'] for e in carry_short)
-    open_long_val  = sum(e['oz'] * e['price'] for e in carry_long)
-    open_short_val = sum(e['oz'] * e['price'] for e in carry_short)
+    # ── Open book at end of period ────────────────────────────────────────────
+    open_long_oz    = sum(e['oz'] for e in carry_long)
+    open_short_oz   = sum(e['oz'] for e in carry_short)
+    open_long_val   = sum(e['oz'] * e['price'] for e in carry_long)
+    open_short_val  = sum(e['oz'] * e['price'] for e in carry_short)
     open_long_vwap  = open_long_val  / open_long_oz  if open_long_oz  > 0 else 0
     open_short_vwap = open_short_val / open_short_oz if open_short_oz > 0 else 0
-    net_oz = open_long_oz - open_short_oz   # positive = net long, negative = net short
+    net_oz = open_long_oz - open_short_oz
 
-    # ── Unrealized MTM on the open book ──────────────────────────────────────
     if net_oz > 0:
         unrealized_mtm = (spot - open_long_vwap)  * net_oz      if open_long_vwap  > 0 else 0
     elif net_oz < 0:
@@ -510,34 +582,50 @@ def exposure_endpoint():
     else:
         unrealized_mtm = 0
 
+    # ── Aggregate display panels (period only) ────────────────────────────────
+    buys   = [d for d in per_deals if d['deal_type']     == 'buy']
+    sells  = [d for d in per_deals if d['deal_type']     == 'sell']
+    longs  = [p for p in per_pos   if p['position_type'] == 'long']
+    shorts = [p for p in per_pos   if p['position_type'] == 'short']
+    buy_oz   = sum(d['oz']                              for d in buys)
+    sell_oz  = sum(d['oz']                              for d in sells)
+    long_oz  = sum(p['contract_oz']                     for p in longs)
+    short_oz = sum(p['contract_oz']                     for p in shorts)
+    buy_val  = sum(d['deal_value_zar']                  for d in buys)
+    sell_val = sum(d['deal_value_zar']                  for d in sells)
+    long_val = sum(p['open_price_zar'] * p['contract_oz'] for p in longs)
+    short_val= sum(p['open_price_zar'] * p['contract_oz'] for p in shorts)
+    agg_b_oz = buy_oz + long_oz;  agg_s_oz = sell_oz + short_oz
+    agg_b_val= buy_val+ long_val; agg_s_val= sell_val+ short_val
+    agg_buy_vwap  = agg_b_val / agg_b_oz if agg_b_oz > 0 else 0
+    agg_sell_vwap = agg_s_val / agg_s_oz if agg_s_oz > 0 else 0
+
     return jsonify({
         'entity':   entity,
         'metal':    metal,
         'spot_zar': spot,
 
-        # Aggregate display panels (buy/sell breakdown, unchanged)
+        # Open book entering this period — shown in Provision block when non-zero
+        'carry_in': carry_in,
+
         'buy_side': {
-            'oz':      round(agg_buy_side_oz,  4),
-            'val':     round(agg_buy_side_val, 2),
-            'vwap':    round(agg_buy_vwap,     2),
-            'buy_oz':  round(buy_oz,           4),
-            'long_oz': round(long_oz,          4),
+            'oz':      round(agg_b_oz,       4),
+            'val':     round(agg_b_val,      2),
+            'vwap':    round(agg_buy_vwap,   2),
+            'buy_oz':  round(buy_oz,         4),
+            'long_oz': round(long_oz,        4),
         },
         'sell_side': {
-            'oz':       round(agg_sell_side_oz,  4),
-            'val':      round(agg_sell_side_val, 2),
-            'vwap':     round(agg_sell_vwap,     2),
-            'sell_oz':  round(sell_oz,           4),
-            'short_oz': round(short_oz,          4),
+            'oz':       round(agg_s_oz,       4),
+            'val':      round(agg_s_val,      2),
+            'vwap':     round(agg_sell_vwap,  2),
+            'sell_oz':  round(sell_oz,        4),
+            'short_oz': round(short_oz,       4),
         },
-
-        # FIFO book results
         'matched_oz':      round(total_matched,  4),
         'treasury_alpha':  round(realized_alpha, 2),
         'unrealized_mtm':  round(unrealized_mtm, 2),
         'net_oz':          round(net_oz,         4),
-
-        # Open book VWAPs — the live unmatched position (used for VWAP card)
         'open_long_vwap':  round(open_long_vwap,  2),
         'open_short_vwap': round(open_short_vwap, 2),
         'open_long_oz':    round(open_long_oz,    4),
@@ -821,6 +909,22 @@ def inv_sage_endpoint():
 
 if __name__ == '__main__':
     init_db()
+    # Migrate: create funding_costs if this is an existing DB
+    import sqlite3 as _sq
+    _conn = _sq.connect(models.DB_PATH)
+    _conn.execute("""
+        CREATE TABLE IF NOT EXISTS funding_costs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity      TEXT NOT NULL,
+            metal       TEXT NOT NULL CHECK(metal IN ('gold','silver')),
+            platform    TEXT NOT NULL DEFAULT 'Stone X',
+            cost_type   TEXT NOT NULL CHECK(cost_type IN ('swap_fee','interest_earned')),
+            amount_zar  REAL NOT NULL,
+            charge_date TEXT NOT NULL,
+            notes       TEXT,
+            created_at  TEXT DEFAULT (datetime('now'))
+        )""")
+    _conn.commit(); _conn.close()
     os.makedirs(INBOX_DIR, exist_ok=True)
     print("Treasury Brain server starting on http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)

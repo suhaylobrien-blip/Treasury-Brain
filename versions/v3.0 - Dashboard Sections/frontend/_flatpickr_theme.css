@@ -1,0 +1,165 @@
+/* ── Flatpickr — SA Bullion × Tyrian Purple theme ─────────────────────────── */
+
+/* Calendar container */
+.flatpickr-calendar {
+  background:   #150E26;
+  border:       1px solid rgba(107,57,175,0.40);
+  border-radius: 12px;
+  box-shadow:   0 8px 40px rgba(0,0,0,0.65);
+  font-family:  -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  color:        #F0EEF8;
+  padding:      8px;
+  width:        280px;
+}
+
+/* Arrow (triangle) connecting to input */
+.flatpickr-calendar.arrowTop::before,
+.flatpickr-calendar.arrowTop::after {
+  border-bottom-color: rgba(107,57,175,0.40);
+}
+.flatpickr-calendar.arrowBottom::before,
+.flatpickr-calendar.arrowBottom::after {
+  border-top-color: rgba(107,57,175,0.40);
+}
+
+/* Month / year header */
+.flatpickr-month {
+  background:  transparent;
+  color:       #F0EEF8;
+  height:      40px;
+  line-height: 40px;
+}
+.flatpickr-current-month {
+  font-size:   15px;
+  font-weight: 600;
+  color:       #D4A755;
+  padding-top: 6px;
+}
+.flatpickr-current-month .cur-month:hover,
+.flatpickr-current-month .numInputWrapper:hover {
+  background: rgba(107,57,175,0.15);
+  border-radius: 6px;
+}
+.flatpickr-current-month input.cur-year {
+  color:      #D4A755;
+  font-weight:600;
+}
+
+/* Prev / next month arrows */
+.flatpickr-prev-month,
+.flatpickr-next-month {
+  color:  #A07ED6 !important;
+  fill:   #A07ED6 !important;
+  padding: 6px 10px;
+}
+.flatpickr-prev-month:hover svg,
+.flatpickr-next-month:hover svg {
+  fill: #D4A755 !important;
+}
+
+/* Weekday header row */
+.flatpickr-weekdays {
+  background: transparent;
+}
+span.flatpickr-weekday {
+  color:       rgba(240,238,248,0.45);
+  font-size:   11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Day cells */
+.flatpickr-day {
+  color:        #F0EEF8;
+  border-radius: 7px;
+  border:       1px solid transparent;
+  font-size:    13px;
+  line-height:  36px;
+  height:       36px;
+  max-width:    36px;
+}
+.flatpickr-day:hover {
+  background:   rgba(107,57,175,0.25);
+  border-color: rgba(107,57,175,0.45);
+  color:        #F0EEF8;
+}
+
+/* Selected day */
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background:   #7B4FC9;
+  border-color: #7B4FC9;
+  color:        #F0EEF8;
+  font-weight:  600;
+}
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange:hover,
+.flatpickr-day.endRange:hover {
+  background:   #9B6FE9;
+  border-color: #9B6FE9;
+}
+
+/* Today */
+.flatpickr-day.today {
+  border-color: #D4A755;
+  color:        #D4A755;
+  font-weight:  600;
+}
+.flatpickr-day.today:hover {
+  background:   rgba(212,167,85,0.15);
+  color:        #D4A755;
+}
+.flatpickr-day.today.selected {
+  background:   #7B4FC9;
+  border-color: #7B4FC9;
+  color:        #F0EEF8;
+}
+
+/* Other-month days */
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+  color: rgba(240,238,248,0.22);
+}
+
+/* Disabled days */
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.flatpickr-disabled:hover {
+  color:  rgba(240,238,248,0.18);
+  cursor: not-allowed;
+}
+
+/* Input styling — match the filter-custom look */
+#filter-from,
+#filter-to {
+  background:   #1E1438;
+  border:       1px solid rgba(107,57,175,0.35);
+  border-radius: 8px;
+  color:        #F0EEF8;
+  font-size:    13px;
+  padding:      6px 10px;
+  width:        110px;
+  cursor:       pointer;
+  outline:      none;
+  transition:   border-color 0.2s;
+  text-align:   center;
+}
+#filter-from:focus,
+#filter-to:focus,
+#filter-from:hover,
+#filter-to:hover {
+  border-color: #7B4FC9;
+}
+#filter-from::placeholder,
+#filter-to::placeholder {
+  color: rgba(240,238,248,0.35);
+}
+
+/* Spinner arrows inside year input */
+.flatpickr-current-month .numInputWrapper span {
+  border-color: rgba(107,57,175,0.40);
+}
+.flatpickr-current-month .numInputWrapper span:hover {
+  background: rgba(107,57,175,0.20);
+}
