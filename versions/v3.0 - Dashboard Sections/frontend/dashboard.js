@@ -662,7 +662,7 @@ function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedgin
   setSubLines('exp-vwap-sub',
     [`${fmt(ecoOz, 2)} oz`, `${metalLbl}${catSuffix} net exposed`],
     vwap > 0 ? [pctStr, `vs spot (${formatCurrency(spot)})`] : null,
-    closingGP != null ? [formatCurrency(closingGP), `GP if closed at spot`] : null,
+    closingGP != null ? [formatCurrency(closingGP), `GP if closed at spot`, `color:${gpGradientColor(closingGP)};font-weight:600`] : null,
   );
 
   const card = document.getElementById('exp-card-vwap');
@@ -2127,14 +2127,26 @@ function set(id, value) {
   if (el) el.textContent = value;
 }
 
-// Render labeled sub-lines: setSubLines('id', ['value', 'label'], ['value2', 'label2'], ...)
-// Null entries are skipped.
+// Render labeled sub-lines: setSubLines('id', ['value', 'label'], ['value2', 'label2', 'color:red'], ...)
+// Third element in each pair is an optional inline style string. Null entries are skipped.
 function setSubLines(id, ...pairs) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.innerHTML = pairs.filter(p => p != null).map(([val, lbl]) =>
-    `<span class="sub-line"><span class="sub-val">${val}</span>&ensp;${lbl}</span>`
+  el.innerHTML = pairs.filter(p => p != null).map(([val, lbl, style]) =>
+    `<span class="sub-line"><span class="sub-val"${style ? ` style="${style}"` : ''}>${val}</span>&ensp;${lbl}</span>`
   ).join('');
+}
+
+// Returns a green→red gradient colour for a GP value between -1,000,000 and +1,000,000.
+// Near zero = pale tint; near ±1M = full saturation.
+function gpGradientColor(value) {
+  const MAX = 1_000_000;
+  const t   = Math.min(Math.abs(value) / MAX, 1); // 0 → 1
+  const sat = Math.round(25 + t * 75);             // 25% → 100%
+  const lit = Math.round(72 - t * 37);             // 72% → 35%
+  return value >= 0
+    ? `hsl(135, ${sat}%, ${lit}%)`  // green family
+    : `hsl(0,   ${sat}%, ${lit}%)`; // red family
 }
 
 function fmt(val, decimals = 2) {
