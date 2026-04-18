@@ -988,9 +988,19 @@ function renderPositionsTable(positions, goldPhysical, silverPhysical) {
     p._coverPct     = physical[p.metal] !== 0
       ? (Math.abs(delta) / Math.abs(physical[p.metal]) * 100) : 0;
     p._runZar       = Math.abs(running[p.metal]) * spot;
-    // % diff = how far live spot is from the avg hedge open price
+    // % vs hedge VWAP — running weighted avg of hedge open prices only
     p._spotPct      = (spot > 0 && hedgeVwap > 0)
       ? (spot - hedgeVwap) / hedgeVwap * 100 : null;
+    // % vs Open Exposure VWAP — FIFO full book VWAP (physical + hedge, unmatched)
+    const expCache  = p.metal === 'gold'
+      ? (_vwapCache.exposure || {}) : (_vwapCache.otherExposure || {});
+    const isLongPos = p.position_type === 'long';
+    const openExpVwap = isLongPos
+      ? (expCache.open_long_vwap  || 0)
+      : (expCache.open_short_vwap || 0);
+    p._openExpPct   = (spot > 0 && openExpVwap > 0)
+      ? (spot - openExpVwap) / openExpVwap * 100 : null;
+    p._openExpVwap  = openExpVwap;
   }
 
   // ── Render in display order (gold→silver, longs→shorts, newest first) ─────────
@@ -1074,8 +1084,11 @@ function renderPositionsTable(positions, goldPhysical, silverPhysical) {
       <td class="num pos-net-cell">
         <span class="${dirClass}">${fmt(netAbs, 2)} oz ${dirLabel}</span>
         <span class="pos-cover">${p._runZar > 0 ? formatCurrency(p._runZar) + ' at spot' : '–'}</span>
+        ${p._openExpPct !== null
+          ? (() => { const s = p._openExpPct >= 0 ? '+' : ''; const c = p._openExpPct >= 0 ? 'pos-mtm-pos' : 'pos-mtm-neg'; return `<span class="pos-cover ${c}" title="Open Exposure VWAP: ${formatCurrency(p._openExpVwap)}">${s}${fmt(p._openExpPct, 2)}% vs open exp. VWAP</span>`; })()
+          : ''}
         ${p._spotPct !== null
-          ? `<span class="pos-cover ${spotPctClass}">${spotSign}${fmt(p._spotPct, 2)}% vs hedge VWAP</span>`
+          ? `<span class="pos-cover ${spotPctClass}" style="opacity:0.65">${spotSign}${fmt(p._spotPct, 2)}% vs hedge VWAP</span>`
           : ''}
       </td>
       <td class="pos-notes">${p.notes || '–'}</td>
