@@ -393,83 +393,155 @@ def hedging_realized():
 @app.route('/api/exposure')
 def exposure_endpoint():
     """
-    Combined exposure view — merges physical trading deals with hedge positions:
-      Buy-side  = Buybacks + Longs
-      Sell-side = Sales    + Shorts
-    Treasury Alpha = (Sell-side VWAP − Buy-side VWAP) × min(buy-side oz, sell-side oz)
+    FIFO daily book engine — matches longs vs shorts chronologically, per metal.
+
+    Each day's activity (physical buys/sells + hedge longs/shorts) is added to
+    the running book in date order. Positions are matched FIFO as opposing sides
+    accumulate. Unmatched positions carry forward and affect subsequent VWAPs.
+
+    Treasury Alpha = Σ (sell_price - buy_price) × oz   across all FIFO-matched pairs
+    Matched oz     = total oz where a long was closed against a short
+    Open book      = residual unmatched positions still running
     """
+    from collections import defaultdict
+
     entity    = request.args.get('entity', 'SABIS')
     metal     = request.args.get('metal',  'gold')
     from_date = request.args.get('from')
     to_date   = request.args.get('to')
 
     deals     = get_deals(entity, metal, from_date=from_date, to_date=to_date)
-    positions = get_hedging_positions(entity, metal)   # all open — no date filter
+    positions = get_hedging_positions(entity, metal)   # full hedge book — no date filter
     spot      = get_latest_spot(metal)
 
+    # ── Raw aggregates (for display panels — unchanged) ───────────────────────
     buys   = [d for d in deals     if d['deal_type']     == 'buy']
     sells  = [d for d in deals     if d['deal_type']     == 'sell']
     longs  = [p for p in positions if p['position_type'] == 'long']
     shorts = [p for p in positions if p['position_type'] == 'short']
 
-    buy_oz   = sum(d['oz']          for d in buys)
-    sell_oz  = sum(d['oz']          for d in sells)
-    long_oz  = sum(p['contract_oz'] for p in longs)
-    short_oz = sum(p['contract_oz'] for p in shorts)
+    buy_oz    = sum(d['oz']                             for d in buys)
+    sell_oz   = sum(d['oz']                             for d in sells)
+    long_oz   = sum(p['contract_oz']                    for p in longs)
+    short_oz  = sum(p['contract_oz']                    for p in shorts)
+    buy_val   = sum(d['deal_value_zar']                 for d in buys)
+    sell_val  = sum(d['deal_value_zar']                 for d in sells)
+    long_val  = sum(p['open_price_zar'] * p['contract_oz'] for p in longs)
+    short_val = sum(p['open_price_zar'] * p['contract_oz'] for p in shorts)
 
-    buy_val   = sum(d['deal_value_zar']                      for d in buys)
-    sell_val  = sum(d['deal_value_zar']                      for d in sells)
-    long_val  = sum(p['open_price_zar'] * p['contract_oz']   for p in longs)
-    short_val = sum(p['open_price_zar'] * p['contract_oz']   for p in shorts)
+    agg_buy_side_oz   = buy_oz  + long_oz
+    agg_sell_side_oz  = sell_oz + short_oz
+    agg_buy_side_val  = buy_val + long_val
+    agg_sell_side_val = sell_val + short_val
+    agg_buy_vwap  = agg_buy_side_val  / agg_buy_side_oz  if agg_buy_side_oz  > 0 else 0
+    agg_sell_vwap = agg_sell_side_val / agg_sell_side_oz if agg_sell_side_oz > 0 else 0
 
-    # Combined sides
-    buy_side_oz  = buy_oz  + long_oz
-    sell_side_oz = sell_oz + short_oz
-    buy_side_val = buy_val + long_val
-    sell_side_val = sell_val + short_val
+    # ── Build chronological event timeline ────────────────────────────────────
+    events = []
+    for d in deals:
+        oz = d['oz'] or 0
+        if oz <= 0:
+            continue
+        price = (d['deal_value_zar'] / oz) if oz > 0 else 0
+        events.append({
+            'date':   d['deal_date'],
+            'oz':     oz,
+            'price':  price,
+            'side':   'long' if d['deal_type'] == 'buy' else 'short',
+        })
+    for p in positions:
+        oz = p['contract_oz'] or 0
+        if oz <= 0:
+            continue
+        events.append({
+            'date':  p['open_date'],
+            'oz':    oz,
+            'price': p['open_price_zar'] or 0,
+            'side':  'long' if p['position_type'] == 'long' else 'short',
+        })
 
-    buy_side_vwap  = buy_side_val  / buy_side_oz  if buy_side_oz  > 0 else 0
-    sell_side_vwap = sell_side_val / sell_side_oz if sell_side_oz > 0 else 0
+    # ── Group by date, process chronologically ────────────────────────────────
+    daily = defaultdict(lambda: {'long': [], 'short': []})
+    for e in events:
+        daily[e['date']][e['side']].append({'oz': e['oz'], 'price': e['price']})
 
-    # Treasury Alpha: profit locked in on the matched (closed-loop) portion
-    # This represents realized alpha — physical deals offsetting hedge positions
-    matched_oz     = min(buy_side_oz, sell_side_oz)
-    treasury_alpha = (sell_side_vwap - buy_side_vwap) * matched_oz
+    carry_long  = []   # open long positions carried forward (FIFO queue)
+    carry_short = []   # open short positions carried forward (FIFO queue)
+    matched_pairs = []
 
-    # Unrealized MTM: the net unmatched (still-exposed) oz valued at current spot
-    # Long-biased (more buys than sells): MTM = (spot - buy_vwap) * excess_oz
-    # Short-biased (more sells than buys): MTM = (sell_vwap - spot) * excess_oz
-    net_oz     = buy_side_oz - sell_side_oz
-    excess_oz  = abs(net_oz)
-    if net_oz > 0:          # net long — profit if spot has risen above buy vwap
-        unrealized_mtm = (spot - buy_side_vwap)  * excess_oz if buy_side_vwap  > 0 else 0
-    elif net_oz < 0:        # net short — profit if spot has fallen below sell vwap
-        unrealized_mtm = (sell_side_vwap - spot) * excess_oz if sell_side_vwap > 0 else 0
+    def _match():
+        """FIFO: consume the fronts of both queues until one is exhausted."""
+        while carry_long and carry_short:
+            l, s  = carry_long[0], carry_short[0]
+            oz    = min(l['oz'], s['oz'])
+            matched_pairs.append({
+                'oz':        oz,
+                'buy_price':  l['price'],
+                'sell_price': s['price'],
+            })
+            l['oz'] -= oz
+            s['oz'] -= oz
+            if l['oz'] < 1e-9: carry_long.pop(0)
+            if s['oz'] < 1e-9: carry_short.pop(0)
+
+    for date in sorted(daily.keys()):
+        carry_long.extend(daily[date]['long'])
+        carry_short.extend(daily[date]['short'])
+        _match()
+
+    # ── FIFO results ──────────────────────────────────────────────────────────
+    total_matched  = sum(m['oz'] for m in matched_pairs)
+    realized_alpha = sum((m['sell_price'] - m['buy_price']) * m['oz'] for m in matched_pairs)
+
+    # ── Open book (residual unmatched positions) ──────────────────────────────
+    open_long_oz   = sum(e['oz'] for e in carry_long)
+    open_short_oz  = sum(e['oz'] for e in carry_short)
+    open_long_val  = sum(e['oz'] * e['price'] for e in carry_long)
+    open_short_val = sum(e['oz'] * e['price'] for e in carry_short)
+    open_long_vwap  = open_long_val  / open_long_oz  if open_long_oz  > 0 else 0
+    open_short_vwap = open_short_val / open_short_oz if open_short_oz > 0 else 0
+    net_oz = open_long_oz - open_short_oz   # positive = net long, negative = net short
+
+    # ── Unrealized MTM on the open book ──────────────────────────────────────
+    if net_oz > 0:
+        unrealized_mtm = (spot - open_long_vwap)  * net_oz      if open_long_vwap  > 0 else 0
+    elif net_oz < 0:
+        unrealized_mtm = (open_short_vwap - spot) * abs(net_oz) if open_short_vwap > 0 else 0
     else:
         unrealized_mtm = 0
 
     return jsonify({
-        'entity': entity,
-        'metal':  metal,
+        'entity':   entity,
+        'metal':    metal,
         'spot_zar': spot,
+
+        # Aggregate display panels (buy/sell breakdown, unchanged)
         'buy_side': {
-            'oz':      round(buy_side_oz,  4),
-            'val':     round(buy_side_val, 2),
-            'vwap':    round(buy_side_vwap, 2),
-            'buy_oz':  round(buy_oz,  4),
-            'long_oz': round(long_oz, 4),
+            'oz':      round(agg_buy_side_oz,  4),
+            'val':     round(agg_buy_side_val, 2),
+            'vwap':    round(agg_buy_vwap,     2),
+            'buy_oz':  round(buy_oz,           4),
+            'long_oz': round(long_oz,          4),
         },
         'sell_side': {
-            'oz':       round(sell_side_oz,  4),
-            'val':      round(sell_side_val, 2),
-            'vwap':     round(sell_side_vwap, 2),
-            'sell_oz':  round(sell_oz,  4),
-            'short_oz': round(short_oz, 4),
+            'oz':       round(agg_sell_side_oz,  4),
+            'val':      round(agg_sell_side_val, 2),
+            'vwap':     round(agg_sell_vwap,     2),
+            'sell_oz':  round(sell_oz,           4),
+            'short_oz': round(short_oz,          4),
         },
-        'matched_oz':      round(matched_oz,      4),
-        'treasury_alpha':  round(treasury_alpha,  2),   # realized: matched oz VWAP spread
-        'unrealized_mtm':  round(unrealized_mtm,  2),   # reference only: net exposed oz at spot
-        'net_oz':          round(net_oz,           4),   # positive=net long, negative=net short
+
+        # FIFO book results
+        'matched_oz':      round(total_matched,  4),
+        'treasury_alpha':  round(realized_alpha, 2),
+        'unrealized_mtm':  round(unrealized_mtm, 2),
+        'net_oz':          round(net_oz,         4),
+
+        # Open book VWAPs — the live unmatched position (used for VWAP card)
+        'open_long_vwap':  round(open_long_vwap,  2),
+        'open_short_vwap': round(open_short_vwap, 2),
+        'open_long_oz':    round(open_long_oz,    4),
+        'open_short_oz':   round(open_short_oz,   4),
     })
 
 

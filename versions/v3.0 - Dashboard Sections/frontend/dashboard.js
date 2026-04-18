@@ -299,8 +299,8 @@ async function loadAll() {
     if (typeof renderInventorySnapshot === 'function') renderInventorySnapshot(gsBull, gsProof, ssBull, ssProof);
     // Store combined inv refs for VWAP banner spot refresh
     gInv_ = gInv; sInv_ = sInv; gHedge_ = gHedge; sHedge_ = sHedge;
-    _vwapCache = { deals: fgDeals, otherDeals: fsDeals, inv: gInv, hedging: gHedge, otherInv: sInv, otherHedging: sHedge };
-    renderVwapBanner(fgDeals, fsDeals, gInv, gHedge, sInv, sHedge);
+    _vwapCache = { deals: fgDeals, otherDeals: fsDeals, inv: gInv, hedging: gHedge, otherInv: sInv, otherHedging: sHedge, exposure: gExp, otherExposure: sExp };
+    renderVwapBanner(fgDeals, fsDeals, gInv, gHedge, sInv, sHedge, gExp, sExp);
     updateBannerLayout();
     await loadSpot();
     return;
@@ -392,8 +392,8 @@ async function loadAll() {
   _invSnap = { goldBull: gsBull_, goldProof: gsProof_, silBull: ssBull_, silProof: ssProof_ };
   if (typeof renderInventorySnapshot === 'function') renderInventorySnapshot(gsBull_, gsProof_, ssBull_, ssProof_);
 
-  _vwapCache = { deals: fDeals, otherDeals: fOtherDeals, inv, hedging, otherInv, otherHedging };
-  renderVwapBanner(fDeals, fOtherDeals, inv, hedging, otherInv, otherHedging);
+  _vwapCache = { deals: fDeals, otherDeals: fOtherDeals, inv, hedging, otherInv, otherHedging, exposure, otherExposure };
+  renderVwapBanner(fDeals, fOtherDeals, inv, hedging, otherInv, otherHedging, exposure, otherExposure);
   updateBannerLayout();
 
   await loadSpot();
@@ -582,7 +582,7 @@ function updateBannerLayout() {
 
 // ─── VWAP EXPOSURE BANNER CARD ────────────────────────────────────────────────
 
-function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedging) {
+function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedging, exposure, otherExposure) {
   function buyVwap(subset) {
     const buys = subset.filter(d => d.deal_type === 'buy');
     const oz   = buys.reduce((s, d) => s + (d.oz || 0), 0);
@@ -596,30 +596,37 @@ function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedgin
   const spot = liveSpots[currentMetal === 'silver' ? 'silver' : 'gold'];
 
   if (currentMetal === 'combined') {
-    const gDeals = (deals || []).filter(d => d.metal === 'gold');
-    const sDeals = (otherDeals || []).concat((deals || []).filter(d => d.metal === 'silver'));
-    const gv = buyVwap([...(deals||[]), ...(otherDeals||[])].filter(d => d.metal === 'gold'));
-    const sv = buyVwap([...(deals||[]), ...(otherDeals||[])].filter(d => d.metal === 'silver'));
-    const gSpot = liveSpots.gold, sSpot = liveSpots.silver;
-    const gPct  = pctVsSpot(gv.vwap, gSpot);
-    const sPct  = pctVsSpot(sv.vwap, sSpot);
+    // Combined: use open book VWAPs from FIFO exposure if available, else fall back to aggregate
+    const gExp = exposure     || {};
+    const sExp = otherExposure || {};
     const gEco  = (gInv_?.total_oz || 0) + ((gHedge_?.net_oz) || 0);
     const sEco  = (sInv_?.total_oz || 0) + ((sHedge_?.net_oz) || 0);
+    const gIsShort = gEco < 0;
+    const sIsShort = sEco < 0;
+    const gVwap = gIsShort
+      ? (gExp.open_short_vwap || buyVwap([...(deals||[])].filter(d => d.metal === 'gold')).vwap)
+      : (gExp.open_long_vwap  || buyVwap([...(deals||[])].filter(d => d.metal === 'gold')).vwap);
+    const sVwap = sIsShort
+      ? (sExp.open_short_vwap || buyVwap([...(otherDeals||[])].filter(d => d.metal === 'silver')).vwap)
+      : (sExp.open_long_vwap  || buyVwap([...(otherDeals||[])].filter(d => d.metal === 'silver')).vwap);
+    const gSpot = liveSpots.gold, sSpot = liveSpots.silver;
+    const gPct  = pctVsSpot(gVwap, gSpot);
+    const sPct  = pctVsSpot(sVwap, sSpot);
 
     set('exp-vwap-combined-val',
-      [gv.vwap > 0 ? `Au ${formatCurrency(gv.vwap)}` : '', sv.vwap > 0 ? `Ag ${formatCurrency(sv.vwap)}` : '']
+      [gVwap > 0 ? `Au ${formatCurrency(gVwap)}` : '', sVwap > 0 ? `Ag ${formatCurrency(sVwap)}` : '']
         .filter(Boolean).join(' / ') || '–'
     );
     setSubLines('exp-vwap-combined-sub',
-      gv.vwap > 0 ? [`${fmt(gEco, 2)} oz`, 'gold net exposed'] : null,
+      gVwap > 0 ? [`${fmt(gEco, 2)} oz`, `gold open book (${gIsShort ? 'short' : 'long'})`] : null,
       gPct != null ? [
         (gPct >= 0 ? '+' : '') + fmt(gPct, 2) + '%',
-        `gold VWAP vs spot (${formatCurrency(gSpot)})`
+        `gold open VWAP vs spot (${formatCurrency(gSpot)})`
       ] : null,
-      sv.vwap > 0 ? [`${fmt(sEco, 2)} oz`, 'silver net exposed'] : null,
+      sVwap > 0 ? [`${fmt(sEco, 2)} oz`, `silver open book (${sIsShort ? 'short' : 'long'})`] : null,
       sPct != null ? [
         (sPct >= 0 ? '+' : '') + fmt(sPct, 2) + '%',
-        `silver VWAP vs spot (${formatCurrency(sSpot)})`
+        `silver open VWAP vs spot (${formatCurrency(sSpot)})`
       ] : null,
     );
 
@@ -631,31 +638,35 @@ function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedgin
     return;
   }
 
-  // Single metal
+  // Single metal — use FIFO open book VWAP from exposure API (unmatched positions only)
   const metal    = currentMetal;
   const metalLbl = metal === 'gold' ? 'gold' : 'silver';
   const ecoOz    = (inv?.total_oz || 0) + (hedging?.net_oz || 0);
   const isShort  = ecoOz < 0;
+  const exp      = exposure || {};
 
-  // Use sell VWAP when net short, buy VWAP when net long
+  // Prefer FIFO open-book VWAP (unmatched residual positions); fall back to deal aggregate
   function sideVwap(subset, side) {
     const filtered = subset.filter(d => d.deal_type === side);
     const oz  = filtered.reduce((s, d) => s + (d.oz || 0), 0);
     const val = filtered.reduce((s, d) => s + (d.deal_value_zar || 0), 0);
     return { vwap: oz > 0 ? val / oz : 0 };
   }
-  const { vwap } = isShort ? sideVwap(deals || [], 'sell') : buyVwap(deals || []);
+  const fifoVwap = isShort ? (exp.open_short_vwap || 0) : (exp.open_long_vwap || 0);
+  const vwap = fifoVwap > 0
+    ? fifoVwap
+    : (isShort ? sideVwap(deals || [], 'sell') : buyVwap(deals || [])).vwap;
 
   const pct    = pctVsSpot(vwap, spot);
   const pctStr = pct != null ? (pct >= 0 ? '+' : '') + fmt(pct, 2) + '%' : '–';
 
-  // GP if net ecosystem exposure closed at live spot (short: buy back at spot; long: sell at spot)
+  // GP if the full net ecosystem exposure were closed at live spot right now
   const closingGP = vwap > 0 && spot > 0
     ? (isShort ? (vwap - spot) : (spot - vwap)) * Math.abs(ecoOz)
     : null;
 
   const catSuffix  = currentCategory === 'bullion' ? ' bullion' : currentCategory === 'proof' ? ' proof' : '';
-  const vwapLabel  = (isShort ? 'Sell VWAP' : 'Buy VWAP') + (catSuffix ? ' ·' + catSuffix : '');
+  const vwapLabel  = (isShort ? 'Open Book Sell VWAP' : 'Open Book Buy VWAP') + (catSuffix ? ' ·' + catSuffix : '');
 
   set('exp-vwap-label', vwapLabel);
   set('exp-vwap-val',   vwap > 0 ? formatCurrency(vwap) : '–');
@@ -1482,12 +1493,13 @@ async function loadSpot() {
     spotEl.value = (currentMetal === 'gold' || currentMetal === 'combined') ? gold : silver;
   }
 
-  // Re-render VWAP banner so % vs spot stays live after price refresh
+  // Re-render VWAP banner so % vs spot and closing GP stay live after price refresh
   if (_vwapCache.deals || _vwapCache.otherDeals) {
     renderVwapBanner(
       _vwapCache.deals, _vwapCache.otherDeals,
-      _vwapCache.inv, _vwapCache.hedging,
-      _vwapCache.otherInv, _vwapCache.otherHedging
+      _vwapCache.inv,   _vwapCache.hedging,
+      _vwapCache.otherInv, _vwapCache.otherHedging,
+      _vwapCache.exposure, _vwapCache.otherExposure
     );
   }
 }
