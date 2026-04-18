@@ -666,7 +666,7 @@ function renderVwapBanner(deals, otherDeals, inv, hedging, otherInv, otherHedgin
     : null;
 
   const catSuffix  = currentCategory === 'bullion' ? ' bullion' : currentCategory === 'proof' ? ' proof' : '';
-  const vwapLabel  = (isShort ? 'Open Book Sell VWAP' : 'Open Book Buy VWAP') + (catSuffix ? ' ·' + catSuffix : '');
+  const vwapLabel  = 'Open Exposure VWAP' + (catSuffix ? ' ·' + catSuffix : '');
 
   set('exp-vwap-label', vwapLabel);
   set('exp-vwap-val',   vwap > 0 ? formatCurrency(vwap) : '–');
